@@ -75,5 +75,11 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v7
 
+      - name: Validate Compose configurations
+        run: |
+          cp .env.example .env
+          docker compose -f docker-compose.yaml config --quiet
+          docker compose -f docker-compose.yaml -f docker-compose.build.yaml config --quiet
+
       - name: Build image
         run: docker build --tag submaker:ci .

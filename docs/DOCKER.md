@@ -1,12 +1,12 @@
 # Docker Deployment Guide
 
-You can run SubMaker directly from Docker Hub without cloning the repo. Below are copy-paste compose files, minimal `.env` examples, and optional build/run instructions for source checkouts.
+You can run this fork directly from GitHub Container Registry. Below are copy-paste compose files, minimal `.env` examples, and optional build/run instructions for source checkouts.
 
 ## Prerequisites
 - Docker 20+ and Docker Compose v2
 - An OpenSubtitles API key (required)
 
-## Quick Start (Docker Hub image + Redis)
+## Quick Start (GHCR image + Redis)
 
 1) Create a folder and enter it:
 ```bash
@@ -26,13 +26,14 @@ STORAGE_TYPE=redis
 # REDIS_KEY_PREFIX=stremio
 ```
 
-3) Create `docker-compose.yaml` (uses Docker Hub image):
+3) Create `docker-compose.yaml` (uses this fork's public GHCR image):
 ```yaml
 version: "3.9"
 
 services:
   submaker:
-    image: xtremexq/submaker:latest
+    image: ghcr.io/kbarni05/stremiosubmaker:latest
+    pull_policy: always
     container_name: submaker
     ports:
       - "${PORT:-7001}:7001"
@@ -123,7 +124,8 @@ version: "3.9"
 
 services:
   submaker:
-    image: xtremexq/submaker:latest
+    image: ghcr.io/kbarni05/stremiosubmaker:latest
+    pull_policy: always
     container_name: submaker
     ports:
       - "${PORT:-7001}:7001"
@@ -147,18 +149,23 @@ docker compose up -d
 docker compose logs -f submaker
 ```
 
-## Using the repo (build or image)
+## Using the repo (published image or local build)
 
-If you clone the repo, `docker-compose.yaml` defaults to building locally. To use the Docker Hub image instead, comment out `build: .` and uncomment the `image:` line.
+The default Compose file pulls the image published from this fork's `main` branch:
 
 ```bash
 git clone https://github.com/kbarni05/StremioSubMaker.git
 cd StremioSubMaker
 cp .env.example .env
 # edit .env with your keys
-docker compose up -d          # uses build
-# or, after switching to image: ... in compose:
-# docker compose up -d
+docker compose pull
+docker compose up -d
+```
+
+To build the current checkout locally instead, apply the included build override:
+
+```bash
+docker compose -f docker-compose.yaml -f docker-compose.build.yaml up -d --build
 ```
 
 ## Docker run (without Compose)
@@ -174,7 +181,7 @@ docker run -d \
   -v $(pwd)/.cache:/app/.cache \
   -e STORAGE_TYPE=filesystem \
   -e OPENSUBTITLES_API_KEY=your_opensubtitles_key \
-  xtremexq/submaker:latest
+  ghcr.io/kbarni05/stremiosubmaker:latest
 ```
 
 External Redis (you supply Redis):
@@ -191,7 +198,7 @@ docker run -d \
   -e REDIS_PASSWORD_FILE=/app/keys/.redis-password \
   -e ENCRYPTION_KEY_FILE=/app/keys/.encryption-key \
   -v $(pwd)/keys:/app/keys \
-  xtremexq/submaker:latest
+  ghcr.io/kbarni05/stremiosubmaker:latest
 ```
 
 ## Configuration notes
@@ -209,16 +216,16 @@ docker run -d \
 - Check app logs: `docker compose logs -f submaker`
 - Check Redis: `docker compose logs -f redis` and `docker compose ps`
 - Port in use? adjust `${PORT:-7001}` mapping or free the port (`lsof -i :7001` on Linux/macOS, `netstat -ano | findstr :7001` on Windows).
-- Refresh image: `docker pull xtremexq/submaker:latest` then `docker compose up -d`
+- Refresh image: `docker compose pull` then `docker compose up -d`
 
 ## Updating a source checkout
 
 Back up `.env` and the persistent `encryption-key`, `redis-data`, and application
-data volumes first. Then rebuild from the updated lockfile:
+data volumes first. Then pull the image published from the updated `main` branch:
 
 ```bash
 git pull --ff-only
-docker compose build --pull
+docker compose pull
 docker compose up -d
 docker compose ps
 curl --fail http://localhost:7001/health
@@ -227,6 +234,13 @@ curl --fail http://localhost:7001/health
 Use `docker compose` (Compose v2) for new installations. The older
 `docker-compose` spelling remains valid only where the standalone v1 binary is
 installed.
+
+For an intentional local source build, use:
+
+```bash
+docker compose -f docker-compose.yaml -f docker-compose.build.yaml build --pull
+docker compose -f docker-compose.yaml -f docker-compose.build.yaml up -d
+```
 
 ---
 
