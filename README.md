@@ -124,6 +124,10 @@ see the **[complete installation and update guide](docs/INSTALLATION.md)**.
 
 📦 **[See complete Docker deployment guide →](docs/DOCKER.md)**
 
+```bash
+docker pull ghcr.io/kbarni05/stremiosubmaker:latest
+```
+
 ### Open Configuration
 
 Visit: **http://localhost:7001**

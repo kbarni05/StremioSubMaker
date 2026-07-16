@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 **Improvements:**
 
+- Added automatic multi-architecture GHCR publishing for the maintained fork, switched the default Compose deployment to `ghcr.io/kbarni05/stremiosubmaker:latest`, and retained local source builds through `docker-compose.build.yaml`.
 - Added Node 22/24 CI with automatic test discovery, dependency auditing, a real `/health` smoke test, and a Docker build gate. Release publishing now requires the same tests and emits SBOM/provenance metadata.
 - Updated the supported runtime to Node 22.12+/24 LTS, refreshed vulnerable dependencies, and added weekly Dependabot maintenance for npm, GitHub Actions, and Docker.
 - Made the Express app importable without binding a port and extracted the health endpoint into a dedicated route module as the first incremental step toward a smaller application entrypoint.

@@ -163,8 +163,8 @@ netstat -ano | findstr :7001
 ### 🔄 Update to Latest Image
 
 ```bash
-docker pull xtremexq/submaker:latest
-docker-compose up -d
+docker compose pull
+docker compose up -d
 ```
 
 ### 📁 Storage Issues

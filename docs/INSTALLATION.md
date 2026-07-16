@@ -65,14 +65,16 @@ Open `http://localhost:7001` after the health endpoint reports `healthy`.
 git clone https://github.com/kbarni05/StremioSubMaker.git
 cd StremioSubMaker
 cp .env.example .env
-docker compose up -d --build
+docker compose pull
+docker compose up -d
 docker compose ps
 docker compose logs -f submaker
 ```
 
-The included Compose file runs Redis, persists application data and encryption
-keys, and binds Redis only to localhost. See [DOCKER.md](DOCKER.md) for variants,
-external Redis, and reverse-proxy notes.
+The included Compose file pulls `ghcr.io/kbarni05/stremiosubmaker:latest`, runs
+Redis, persists application data and encryption keys, and binds Redis only to
+localhost. See [DOCKER.md](DOCKER.md) for local builds, variants, external Redis,
+and reverse-proxy notes.
 
 ## Update an installation
 
@@ -96,7 +98,7 @@ copy if you use systemd, PM2, or another supervisor.
 
 ```bash
 git pull --ff-only
-docker compose build --pull
+docker compose pull
 docker compose up -d
 docker compose ps
 ```

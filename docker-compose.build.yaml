@@ -1,0 +1,6 @@
+services:
+  submaker:
+    image: stremiosubmaker:local
+    build:
+      context: .
+    pull_policy: build
