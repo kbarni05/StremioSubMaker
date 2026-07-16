@@ -11,7 +11,7 @@
 
 <p align="center">
   <a href="https://www.gnu.org/licenses/agpl-3.0"><img src="https://img.shields.io/badge/License-AGPL_v3-blue.svg?style=flat-square" alt="License: AGPL v3"/></a>
-  <img src="https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen?style=flat-square" alt="Node 18+"/>
+  <img src="https://img.shields.io/badge/node-22.12%2B%20%7C%2024-brightgreen?style=flat-square" alt="Node 22.12+ or 24"/>
   <img src="https://img.shields.io/badge/Stremio-Addon-purple?style=flat-square" alt="Stremio Addon"/>
   <img src="https://img.shields.io/badge/languages-433-orange?style=flat-square" alt="433 Languages"/>
   <img src="https://img.shields.io/badge/AI-10%2B%20providers-ff69b4?style=flat-square" alt="10+ AI Providers"/>
@@ -87,25 +87,38 @@ Check their [FREE Stremio Addons Guide](https://stremio-addons-guide.elfhosted.c
 
 ### Prerequisites
 
-- **Node.js** 18+ — [nodejs.org](https://nodejs.org)
+- **Node.js** 22.12+ or 24 LTS — [nodejs.org](https://nodejs.org)
 - **Gemini API Key** — [Get free](https://aistudio.google.com/app/api-keys)
 - At least one subtitle provider key (optional but recommended)
 
 ### Installation
 
 ```bash
-# Clone and install
-git clone https://github.com/xtremexq/StremioSubMaker.git
+# Clone this maintained fork and install its locked dependencies
+git clone https://github.com/kbarni05/StremioSubMaker.git
 cd StremioSubMaker
-npm install
+npm ci
 
-# Create and configure .env
+# Linux/macOS: create and configure .env
 cp .env.example .env
-nano .env
+# Set STORAGE_TYPE=filesystem for a single-machine install and add your API key.
 
 # Start the server
 npm start
 ```
+
+On Windows PowerShell, create the environment file with:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Then set `STORAGE_TYPE=filesystem` in `.env`, start with `npm start`, and verify
+`http://localhost:7001/health`. Keep `.env`, `data/`, and the generated encryption
+key out of source control.
+
+For Docker, Redis/HA deployment, upgrades, and syncing this fork with upstream,
+see the **[complete installation and update guide](docs/INSTALLATION.md)**.
 
 ### 🐳 Docker
 
@@ -241,7 +254,7 @@ Click the **Reset** button at the bottom of the config page.
 
 | Channel | Link |
 |---------|------|
-| **Issues & Bugs** | [Open an issue](https://github.com/xtremexq/StremioSubMaker/issues) |
+| **Issues & Bugs** | [Open an issue](https://github.com/kbarni05/StremioSubMaker/issues) |
 | **Documentation** | Open `/configure` for the live interactive config/help page |
 | **Community** | [Stremio Discord](https://discord.gg/stremio) • [r/StremioAddons](https://reddit.com/r/StremioAddons) |
 
@@ -253,7 +266,7 @@ Click the **Reset** button at the bottom of the config page.
 </p>
 
 <p align="center">
-  <a href="https://github.com/xtremexq/StremioSubMaker">⭐ Star this repo</a> •
-  <a href="https://github.com/xtremexq/StremioSubMaker/issues">🐛 Report Bug</a> •
-  <a href="https://github.com/xtremexq/StremioSubMaker/issues">✨ Request Feature</a>
+  <a href="https://github.com/kbarni05/StremioSubMaker">⭐ Star this fork</a> •
+  <a href="https://github.com/kbarni05/StremioSubMaker/issues">🐛 Report Bug</a> •
+  <a href="https://github.com/kbarni05/StremioSubMaker/issues">✨ Request Feature</a>
 </p>

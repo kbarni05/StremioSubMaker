@@ -10,6 +10,7 @@
  */
 
 const dns = require('dns');
+const net = require('net');
 const log = require('./logger');
 
 // Environment variable to allow internal endpoints (for self-hosters)
@@ -43,6 +44,40 @@ const INTERNAL_HOSTNAMES = new Set([
 ]);
 
 /**
+ * URL.hostname preserves brackets around IPv6 literals in supported Node.js
+ * versions. Normalize them before IP-family and private-range checks so an
+ * address such as [fc00::1] cannot bypass validation.
+ */
+function normalizeIpLiteral(value) {
+    let normalized = String(value || '').trim().toLowerCase();
+    if (normalized.startsWith('[') && normalized.endsWith(']')) {
+        normalized = normalized.slice(1, -1);
+    }
+
+    // Zone identifiers are meaningful only on the local machine. Strip an
+    // encoded or decoded suffix before classifying the address.
+    const zoneIndex = normalized.indexOf('%');
+    if (zoneIndex !== -1) {
+        normalized = normalized.slice(0, zoneIndex);
+    }
+    return normalized;
+}
+
+function extractMappedIpv4(ip) {
+    const dotted = ip.match(/^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/i);
+    if (dotted) return dotted[1];
+
+    // WHATWG URL canonicalization converts ::ffff:127.0.0.1 to
+    // ::ffff:7f00:1. Convert the two trailing hextets back to IPv4.
+    const hexadecimal = ip.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i);
+    if (!hexadecimal) return null;
+
+    const high = Number.parseInt(hexadecimal[1], 16);
+    const low = Number.parseInt(hexadecimal[2], 16);
+    return [high >>> 8, high & 0xff, low >>> 8, low & 0xff].join('.');
+}
+
+/**
  * Check if a hostname or IP is internal/private
  * @param {string} host - Hostname or IP address
  * @returns {boolean} - True if internal/private
@@ -50,22 +85,26 @@ const INTERNAL_HOSTNAMES = new Set([
 function isInternalHost(host) {
     if (!host) return true;  // Empty host is suspicious
 
-    const lowercaseHost = host.toLowerCase();
+    const lowercaseHost = normalizeIpLiteral(host);
 
     // Check against known internal hostnames
     if (INTERNAL_HOSTNAMES.has(lowercaseHost)) {
         return true;
     }
 
+    if (net.isIP(lowercaseHost) !== 0) {
+        return isInternalIp(lowercaseHost);
+    }
+
     // Check against private IP patterns
     for (const pattern of INTERNAL_PATTERNS) {
-        if (pattern.test(host)) {
+        if (pattern.test(lowercaseHost)) {
             return true;
         }
     }
 
     // Check for IPv6 localhost variations
-    if (lowercaseHost.startsWith('[::1]') || lowercaseHost === '::1') {
+    if (lowercaseHost === '::1' || lowercaseHost === '::') {
         return true;
     }
 
@@ -88,36 +127,42 @@ function isInternalHost(host) {
 function isInternalIp(ip) {
     if (!ip) return true;
 
+    const normalizedIp = normalizeIpLiteral(ip);
+
+    if (net.isIP(normalizedIp) === 0) {
+        return true;
+    }
+
     // Check against private IPv4 patterns
     for (const pattern of INTERNAL_PATTERNS) {
-        if (pattern.test(ip)) {
+        if (pattern.test(normalizedIp)) {
             return true;
         }
     }
 
     // IPv6 loopback
-    if (ip === '::1' || ip === '::ffff:127.0.0.1') {
+    if (normalizedIp === '::' || normalizedIp === '::1' || normalizedIp === '::ffff:127.0.0.1') {
         return true;
     }
 
     // IPv4-mapped IPv6 addresses (::ffff:x.x.x.x) — extract the IPv4 part and re-check
-    const v4Mapped = ip.match(/^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/i);
-    if (v4Mapped) {
-        return isInternalIp(v4Mapped[1]);
+    const mappedIpv4 = extractMappedIpv4(normalizedIp);
+    if (mappedIpv4) {
+        return isInternalIp(mappedIpv4);
     }
 
     // IPv6 link-local (fe80::/10)
-    if (/^fe[89ab]/i.test(ip)) {
+    if (/^fe[89ab]/i.test(normalizedIp)) {
         return true;
     }
 
     // IPv6 unique local (fc00::/7)
-    if (/^f[cd]/i.test(ip)) {
+    if (/^f[cd]/i.test(normalizedIp)) {
         return true;
     }
 
     // 0.0.0.0
-    if (ip === '0.0.0.0') {
+    if (normalizedIp === '0.0.0.0') {
         return true;
     }
 
@@ -134,13 +179,15 @@ function isInternalIp(ip) {
  */
 function resolveAndValidateHost(hostname) {
     return new Promise((resolve) => {
+        const normalizedHostname = normalizeIpLiteral(hostname);
+
         // If the hostname is already an IP literal, just check it directly
-        if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname) || hostname.includes(':')) {
-            const internal = isInternalIp(hostname);
+        if (net.isIP(normalizedHostname) !== 0) {
+            const internal = isInternalIp(normalizedHostname);
             return resolve({
                 safe: !internal,
-                resolvedIps: [hostname],
-                error: internal ? `Resolved IP ${hostname} is internal/private` : undefined
+                resolvedIps: [normalizedHostname],
+                error: internal ? `Resolved IP ${normalizedHostname} is internal/private` : undefined
             });
         }
 

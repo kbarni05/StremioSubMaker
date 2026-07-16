@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+**Improvements:**
+
+- Added Node 22/24 CI with automatic test discovery, dependency auditing, a real `/health` smoke test, and a Docker build gate. Release publishing now requires the same tests and emits SBOM/provenance metadata.
+- Updated the supported runtime to Node 22.12+/24 LTS, refreshed vulnerable dependencies, and added weekly Dependabot maintenance for npm, GitHub Actions, and Docker.
+- Made the Express app importable without binding a port and extracted the health endpoint into a dedicated route module as the first incremental step toward a smaller application entrypoint.
+- Added a rate-limited translation-status API with sanitized batch/entry progress, safe multi-instance fallback, and retained completed/failed state that never blocks retries.
+- Added a reproducible installation and update guide for local, Windows, Docker Compose, and fork-sync workflows.
+
+**Bug Fixes:**
+
+- Fixed custom-provider SSRF validation for bracketed private IPv6 and canonicalized IPv4-mapped IPv6 literals, with regression coverage.
+- Fixed the public `npm test` and release-test commands so they no longer reference files missing from the repository.
+- Fixed Windows-1250 Serbian Latin subtitle decoding while preserving Windows-1251 Serbian Cyrillic support for explicit and ambiguous language hints.
+
 ## SubMaker v1.4.88
 
 **Improvements:**
