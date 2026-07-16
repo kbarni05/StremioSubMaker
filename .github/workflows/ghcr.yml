@@ -35,18 +35,28 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract image metadata
-        id: meta
-        uses: docker/metadata-action@v6
-        with:
-          images: ghcr.io/kbarni05/stremiosubmaker
-          tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=ref,event=tag
-            type=sha
-          labels: |
-            org.opencontainers.image.source=https://github.com/kbarni05/StremioSubMaker
-            org.opencontainers.image.description=AI-powered subtitle translation addon for Stremio
+      - name: Prepare image tags
+        id: image
+        shell: bash
+        env:
+          IMAGE: ghcr.io/kbarni05/stremiosubmaker
+        run: |
+          tags=("${IMAGE}:sha-${GITHUB_SHA::7}")
+
+          if [[ "${GITHUB_REF}" == "refs/heads/main" ]]; then
+            tags+=("${IMAGE}:latest")
+          fi
+
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            version="${GITHUB_REF_NAME//[^[:alnum:]_.-]/-}"
+            tags+=("${IMAGE}:${version}")
+          fi
+
+          {
+            echo 'tags<<EOF'
+            printf '%s\n' "${tags[@]}"
+            echo 'EOF'
+          } >> "${GITHUB_OUTPUT}"
 
       - name: Build and push image
         uses: docker/build-push-action@v7
@@ -54,7 +64,11 @@ jobs:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ steps.image.outputs.tags }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ github.ref_name }}
+            org.opencontainers.image.description=AI-powered subtitle translation addon for Stremio
           provenance: mode=max
           sbom: true
