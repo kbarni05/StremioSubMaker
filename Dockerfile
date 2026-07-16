@@ -1,5 +1,5 @@
-# Use Node.js LTS version
-FROM node:20-alpine
+# Use a supported Node.js LTS version. Keep this aligned with package.json.
+FROM node:24-alpine
 
 # Install su-exec for privilege dropping and tzdata for IANA timezone support
 RUN apk add --no-cache su-exec tzdata

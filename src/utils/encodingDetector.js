@@ -58,10 +58,15 @@ const LANGUAGE_ENCODING_HINTS = {
   bg: ['windows-1251'],
   bul: ['windows-1251'],
   bulgarian: ['windows-1251'],
-  // Serbian (Cyrillic)
-  sr: ['windows-1251'],
-  srp: ['windows-1251'],
-  serbian: ['windows-1251'],
+  // Serbian can be written in either Latin or Cyrillic script. Keep explicit
+  // BCP-47 script hints ahead of the ambiguous base-language fallbacks.
+  'sr-latn': ['windows-1250', 'iso-8859-2'],
+  'sr-lat': ['windows-1250', 'iso-8859-2'],
+  'sr-latin': ['windows-1250', 'iso-8859-2'],
+  'sr-cyrl': ['windows-1251', 'iso-8859-5'],
+  sr: ['windows-1250', 'windows-1251', 'iso-8859-2', 'iso-8859-5'],
+  srp: ['windows-1250', 'windows-1251', 'iso-8859-2', 'iso-8859-5'],
+  serbian: ['windows-1250', 'windows-1251', 'iso-8859-2', 'iso-8859-5'],
   // Polish
   pl: ['windows-1250', 'iso-8859-2'],
   pol: ['windows-1250', 'iso-8859-2'],
@@ -152,6 +157,17 @@ function validateDecodedForLanguage(decoded, langHint) {
   const normalized = langHint.trim().toLowerCase();
   const base = normalized.split(/[-_]/)[0];
 
+  if (base === 'sr' || base === 'srp' || normalized === 'serbian') {
+    const wantsLatin = /(?:-|_)(?:latn|lat|latin)$/.test(normalized);
+    const wantsCyrillic = /(?:-|_)(?:cyrl|cyrillic)$/.test(normalized);
+    const expectedSerbianScript = wantsLatin
+      ? /[\u0100-\u024F]/
+      : wantsCyrillic
+        ? /[\u0400-\u04FF]/
+        : /[\u0100-\u024F\u0400-\u04FF]/;
+    return validateScriptContent(decoded, expectedSerbianScript);
+  }
+
   // Only validate for scripts where chardet commonly misdetects
   // Check if decoded text contains characters from the expected Unicode block
   const scriptChecks = {
@@ -186,9 +202,6 @@ function validateDecodedForLanguage(decoded, langHint) {
     bg: /[\u0400-\u04FF]/,
     bul: /[\u0400-\u04FF]/,
     bulgarian: /[\u0400-\u04FF]/,
-    sr: /[\u0400-\u04FF]/,
-    srp: /[\u0400-\u04FF]/,
-    serbian: /[\u0400-\u04FF]/,
     // Thai script: U+0E00-U+0E7F
     th: /[\u0E00-\u0E7F]/,
     tha: /[\u0E00-\u0E7F]/,
@@ -198,6 +211,10 @@ function validateDecodedForLanguage(decoded, langHint) {
   const expectedPattern = scriptChecks[normalized] || scriptChecks[base];
   if (!expectedPattern) return true; // No script check for this language
 
+  return validateScriptContent(decoded, expectedPattern);
+}
+
+function validateScriptContent(decoded, expectedPattern) {
   // Strip SRT formatting (timecodes, numbers, blank lines) to check only text content
   const textOnly = decoded
     .replace(/\d{2}:\d{2}:\d{2}[,.]\d{3}\s*-->\s*\d{2}:\d{2}:\d{2}[,.]\d{3}/g, '')

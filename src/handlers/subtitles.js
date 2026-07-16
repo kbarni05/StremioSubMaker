@@ -30,6 +30,7 @@ const log = require('../utils/logger');
 const { handleCaughtError } = require('../utils/errorClassifier');
 const { isHearingImpairedSubtitle } = require('../utils/subtitleFlags');
 const { generateCacheKeys } = require('../utils/cacheKeys');
+const { createRunningStatus, updateTranslationJobStatus } = require('../utils/translationJobStatus');
 const { deduplicateSubtitles, logDeduplicationStats } = require('../utils/subtitleDeduplication');
 const { version } = require('../utils/version');
 const { isProviderHealthy, circuitBreaker } = require('../utils/httpAgents');
@@ -4811,10 +4812,12 @@ async function handleTranslation(sourceFileId, targetLanguage, config, options =
     // === START BACKGROUND TRANSLATION ===
     // Mark translation as in progress and start it in background
     log.debug(() => ['[Translation] Not cached and not in-progress; starting translation key=', cacheKey]);
-    translationStatus.set(runtimeKey, { inProgress: true, startedAt: Date.now(), userHash: effectiveUserHash });
-    if (sharedInFlightKey) {
-      translationStatus.set(sharedInFlightKey, { inProgress: true, startedAt: Date.now(), userHash: effectiveUserHash });
-    }
+    const statusKeys = [runtimeKey, sharedInFlightKey];
+    updateTranslationJobStatus(
+      translationStatus,
+      statusKeys,
+      createRunningStatus({ userHash: effectiveUserHash })
+    );
     await markSharedTranslationInFlight(sharedLockKey, effectiveUserHash);
     // MULTI-INSTANCE: Increment concurrency counter in Redis with TTL safety
     await incrementUserConcurrency(effectiveUserHash);
@@ -4860,10 +4863,15 @@ async function handleTranslation(sourceFileId, targetLanguage, config, options =
         if (!error._alreadyLogged) {
           log.error(() => ['[Translation] Background translation failed:', error.message]);
         }
-        // Mark as failed so it can be retried
+        // Keep a short-lived, sanitized failure state for status polling. Since
+        // inProgress is false, a new subtitle request can retry immediately.
         try {
-          translationStatus.delete(runtimeKey);
-          if (sharedInFlightKey) translationStatus.delete(sharedInFlightKey);
+          updateTranslationJobStatus(translationStatus, statusKeys, {
+            status: 'failed',
+            stage: 'failed',
+            inProgress: false,
+            failedAt: Date.now()
+          });
         } catch (_) { }
       }).finally(async () => {
         // Clean up the in-flight promise when done
@@ -5210,6 +5218,15 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
         targetLangName,
         config.translationPrompt,
         async (progress) => {
+          updateTranslationJobStatus(translationStatus, [runtimeKey, sharedInFlightKey], {
+            status: 'running',
+            stage: progress.streaming === true ? 'streaming' : 'translating',
+            inProgress: true,
+            currentBatch: Number(progress.currentBatch) || 0,
+            totalBatches: Number(progress.totalBatches) || 0,
+            completedEntries: Number(progress.completedEntries) || 0,
+            totalEntries: Number(progress.totalEntries) || 0
+          });
           let skippedDuplicatePayload = false;
           const persistPartial = async (partialText) => {
             if (partialDeliveryDisabled) return false;
@@ -5409,10 +5426,12 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
     }
 
     // Mark translation as complete
-    translationStatus.set(runtimeKey, { inProgress: false, completedAt: Date.now() });
-    if (sharedInFlightKey) {
-      translationStatus.set(sharedInFlightKey, { inProgress: false, completedAt: Date.now() });
-    }
+    updateTranslationJobStatus(translationStatus, [runtimeKey, sharedInFlightKey], {
+      status: 'completed',
+      stage: 'completed',
+      inProgress: false,
+      completedAt: Date.now()
+    });
 
     // Verify the final translation is readable from cache before deleting partial.
     // This closes the race window where a concurrent request could find neither
@@ -5518,10 +5537,14 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
       log.warn(() => ['[Translation] Failed to cache error:', cacheError.message]);
     }
 
-    // Remove from status so it can be retried
+    // Retain only a sanitized failure state for polling. It does not block retry.
     try {
-      translationStatus.delete(runtimeKey);
-      if (sharedInFlightKey) translationStatus.delete(sharedInFlightKey);
+      updateTranslationJobStatus(translationStatus, [runtimeKey, sharedInFlightKey], {
+        status: 'failed',
+        stage: 'failed',
+        inProgress: false,
+        failedAt: Date.now()
+      });
     } catch (_) { }
 
     // Clean up partial cache on error as well (with retry — Fix #4)

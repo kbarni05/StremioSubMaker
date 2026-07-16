@@ -50,7 +50,7 @@ const { redactToken } = require('./src/utils/security');
 const { getAllLanguages, getAllTranslationLanguages, getLanguageName, toISO6392, findISO6391ByName, canonicalSyncLanguageCode } = require('./src/utils/languages');
 const { generateCacheKeys } = require('./src/utils/cacheKeys');
 const { getCached: getDownloadCached, saveCached: saveDownloadCached, getCacheStats: getDownloadCacheStats } = require('./src/utils/downloadCache');
-const { createSubtitleHandler, handleSubtitleDownload, handleTranslation, createLoadingSubtitle, createSessionTokenErrorSubtitle, createOpenSubtitlesAuthErrorSubtitle, createOpenSubtitlesQuotaExceededSubtitle, createCredentialDecryptionErrorSubtitle, createTranslationErrorSubtitle, readFromPartialCache, hasCachedTranslation, purgeTranslationCache, translationStatus, inFlightTranslations, canUserStartTranslation, getHistoryForUser, migrateHistoryNamespace, resolveHistoryUserHash, saveRequestToHistory, resolveHistoryTitle, enrichHistoryEntriesBackground, maybeConvertToSRT } = require('./src/handlers/subtitles');
+const { createSubtitleHandler, handleSubtitleDownload, handleTranslation, createLoadingSubtitle, createSessionTokenErrorSubtitle, createOpenSubtitlesAuthErrorSubtitle, createOpenSubtitlesQuotaExceededSubtitle, createCredentialDecryptionErrorSubtitle, createTranslationErrorSubtitle, readFromPartialCache, hasCachedTranslation, purgeTranslationCache, translationStatus, inFlightTranslations, canUserStartTranslation, getHistoryForUser, migrateHistoryNamespace, resolveHistoryUserHash, saveRequestToHistory, resolveHistoryTitle, enrichHistoryEntriesBackground, maybeConvertToSRT, isSharedTranslationInFlight } = require('./src/handlers/subtitles');
 const GeminiService = require('./src/services/gemini');
 const TranslationEngine = require('./src/services/translationEngine');
 const { createProviderInstance, createTranslationProvider, resolveCfWorkersCredentials } = require('./src/services/translationProviderFactory');
@@ -71,6 +71,8 @@ const { generateConfigurePage } = require('./src/utils/configurePageGenerator');
 const smdbCache = require('./src/utils/smdbCache');
 const { deriveVideoHash } = require('./src/utils/videoHash');
 const { registerFileUploadRoutes } = require('./src/routes/fileUploadRoutes');
+const { registerHealthRoutes } = require('./src/routes/healthRoutes');
+const { registerTranslationStatusRoutes } = require('./src/routes/translationStatusRoutes');
 const {
     getProviderAuthFailureCacheKey,
     hasCachedProviderAuthFailure,
@@ -2254,6 +2256,7 @@ app.use((req, res, next) => {
         '/api/stream-activity',
         '/api/resolve-linked-title',
         '/api/translate-file',
+        '/api/translation-status',
         '/api/save-synced-subtitle',
         '/api/save-embedded-subtitle',
         '/api/translate-embedded',
@@ -2660,113 +2663,23 @@ app.get('/configure/:config', (req, res) => {
 });
 
 
-// Health check endpoint for Kubernetes/Docker readiness and liveness probes
-// Startup probes get a simple 200 OK immediately (server is alive).
-// Full health details are available once sessions are loaded.
-app.get('/health', async (req, res) => {
-    try {
-        // If session manager isn't ready yet, return a lightweight "starting" response
-        // so Kubernetes startup/liveness probes pass while heavy init is still running
-        if (!sessionManagerReady) {
-            return res.status(200).json({
-                status: 'starting',
-                timestamp: new Date().toISOString(),
-                uptime: Math.floor(process.uptime()),
-                message: 'Server is alive, session manager still initializing'
-            });
-        }
-
-        const { getStorageAdapter } = require('./src/storage/StorageFactory');
-        const { StorageAdapter } = require('./src/storage');
-
-        // Check storage health
-        let storageHealthy = false;
-        let storageType = process.env.STORAGE_TYPE || 'redis';
-
-        try {
-            const adapter = await getStorageAdapter();
-            storageHealthy = await adapter.healthCheck();
-        } catch (error) {
-            log.warn(() => `[Health] Storage health check failed: ${error.message}`);
-        }
-
-        // Get cache sizes if storage is healthy
-        let cacheSizes = {};
-        if (storageHealthy) {
-            try {
-                const adapter = await getStorageAdapter();
-                for (const [name, type] of Object.entries(StorageAdapter.CACHE_TYPES)) {
-                    const sizeBytes = await adapter.size(type);
-                    const limitBytes = StorageAdapter.SIZE_LIMITS[type];
-                    cacheSizes[type] = {
-                        current: sizeBytes,
-                        currentMB: (sizeBytes / (1024 * 1024)).toFixed(2),
-                        limit: limitBytes,
-                        limitMB: limitBytes ? (limitBytes / (1024 * 1024)).toFixed(2) : 'unlimited',
-                        utilizationPercent: limitBytes ? ((sizeBytes / limitBytes) * 100).toFixed(1) : 0
-                    };
-                }
-            } catch (error) {
-                log.warn(() => `[Health] Cache size check failed: ${error.message}`);
-            }
-        }
-
-        // Get memory usage
-        const memUsage = process.memoryUsage();
-        const memory = {
-            rss: (memUsage.rss / (1024 * 1024)).toFixed(2) + ' MB',
-            heapUsed: (memUsage.heapUsed / (1024 * 1024)).toFixed(2) + ' MB',
-            heapTotal: (memUsage.heapTotal / (1024 * 1024)).toFixed(2) + ' MB',
-            external: (memUsage.external / (1024 * 1024)).toFixed(2) + ' MB'
-        };
-
-        const healthy = storageHealthy;
-        const status = healthy ? 'healthy' : 'unhealthy';
-        const statusCode = healthy ? 200 : 503;
-
-        res.status(statusCode).json({
-            status,
-            timestamp: new Date().toISOString(),
-            uptime: Math.floor(process.uptime()),
-            uptimeHuman: formatUptime(process.uptime()),
-            version,
-            storage: {
-                type: storageType,
-                healthy: storageHealthy,
-                caches: cacheSizes
-            },
-            memory,
-            sessions: await sessionManager.getStats(),
-            sentry: {
-                initialized: sentry.isInitialized(),
-                environment: process.env.SENTRY_ENVIRONMENT || 'production'
-            }
-        });
-    } catch (error) {
-        log.error(() => `[Health] Error: ${error.message}`);
-        res.status(503).json({
-            status: 'unhealthy',
-            error: error.message,
-            timestamp: new Date().toISOString()
-        });
-    }
+registerHealthRoutes(app, {
+    isSessionManagerReady: () => sessionManagerReady,
+    sessionManager,
+    sentry,
+    version,
+    log
 });
 
-// Helper function to format uptime in human-readable format
-function formatUptime(seconds) {
-    const days = Math.floor(seconds / 86400);
-    const hours = Math.floor((seconds % 86400) / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = Math.floor(seconds % 60);
-
-    const parts = [];
-    if (days > 0) parts.push(`${days}d`);
-    if (hours > 0) parts.push(`${hours}h`);
-    if (minutes > 0) parts.push(`${minutes}m`);
-    if (secs > 0 || parts.length === 0) parts.push(`${secs}s`);
-
-    return parts.join(' ');
-}
+registerTranslationStatusRoutes(app, {
+    limiter: statsLimiter,
+    resolveConfigGuarded,
+    translationStatus,
+    isSharedTranslationInFlight,
+    hasCachedTranslation,
+    setNoStore,
+    log
+});
 
 // ── Changelog API ───────────────────────────────────────────────────────
 // Parses CHANGELOG.md once at startup and caches the result.
@@ -8374,8 +8287,10 @@ app.use((error, req, res, next) => {
     res.status(500).json({ error: t('server.errors.internalServerError', {}, 'Internal server error') });
 });
 
-// Initialize caches and session manager, then start server
-(async () => {
+// Initialize caches and session manager, then start server. Keeping startup in
+// an exported function lets tests and tooling import the Express app without
+// binding a port or contacting external infrastructure.
+async function startServer() {
     // =========================================================================
     // PHASE 1: Bind HTTP server IMMEDIATELY so Kubernetes startup probes pass.
     // The readiness middleware (FORCE_SESSION_READY) already gates all
@@ -8535,6 +8450,18 @@ app.use((error, req, res, next) => {
             log.warn(() => `[Health] Periodic health log failed: ${err.message}`);
         }
     }, HEALTH_LOG_INTERVAL_MS).unref?.();
-})();
+}
+
+if (require.main === module) {
+    startServer().catch(error => {
+        log.error(() => ['[Startup] Fatal server startup error:', error]);
+        sentry.captureErrorForced(error, {
+            module: 'ServerStartup',
+            type: 'startupFailure'
+        });
+        process.exitCode = 1;
+    });
+}
 
 module.exports = app;
+module.exports.startServer = startServer;

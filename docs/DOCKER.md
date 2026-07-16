@@ -102,8 +102,8 @@ volumes:
 
 4) Start and watch logs:
 ```bash
-docker-compose up -d
-docker-compose logs -f submaker
+docker compose up -d
+docker compose logs -f submaker
 ```
 
 ## Filesystem-only variant (no Redis)
@@ -143,8 +143,8 @@ services:
 
 Start with:
 ```bash
-docker-compose up -d
-docker-compose logs -f submaker
+docker compose up -d
+docker compose logs -f submaker
 ```
 
 ## Using the repo (build or image)
@@ -152,13 +152,13 @@ docker-compose logs -f submaker
 If you clone the repo, `docker-compose.yaml` defaults to building locally. To use the Docker Hub image instead, comment out `build: .` and uncomment the `image:` line.
 
 ```bash
-git clone https://github.com/xtremexq/StremioSubMaker.git
+git clone https://github.com/kbarni05/StremioSubMaker.git
 cd StremioSubMaker
 cp .env.example .env
 # edit .env with your keys
-docker-compose up -d          # uses build
+docker compose up -d          # uses build
 # or, after switching to image: ... in compose:
-# docker-compose up -d
+# docker compose up -d
 ```
 
 ## Docker run (without Compose)
@@ -206,11 +206,28 @@ docker run -d \
 - Redis commands default to a 5000ms command timeout via `REDIS_COMMAND_TIMEOUT_MS`; this is a storage safety limit, not the subtitle provider timeout.
 
 ## Troubleshooting
-- Check app logs: `docker-compose logs -f submaker`
-- Check Redis: `docker-compose logs -f redis` and `docker-compose ps`
+- Check app logs: `docker compose logs -f submaker`
+- Check Redis: `docker compose logs -f redis` and `docker compose ps`
 - Port in use? adjust `${PORT:-7001}` mapping or free the port (`lsof -i :7001` on Linux/macOS, `netstat -ano | findstr :7001` on Windows).
-- Refresh image: `docker pull xtremexq/submaker:latest` then `docker-compose up -d`
+- Refresh image: `docker pull xtremexq/submaker:latest` then `docker compose up -d`
+
+## Updating a source checkout
+
+Back up `.env` and the persistent `encryption-key`, `redis-data`, and application
+data volumes first. Then rebuild from the updated lockfile:
+
+```bash
+git pull --ff-only
+docker compose build --pull
+docker compose up -d
+docker compose ps
+curl --fail http://localhost:7001/health
+```
+
+Use `docker compose` (Compose v2) for new installations. The older
+`docker-compose` spelling remains valid only where the standalone v1 binary is
+installed.
 
 ---
 
-[Back to README](../README.md)
+[Installation and update guide](INSTALLATION.md) | [Back to README](../README.md)
