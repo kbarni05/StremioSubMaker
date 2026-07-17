@@ -2675,8 +2675,61 @@ textarea {
     display: flex;
     gap: 0.75rem;
     justify-content: center;
+    align-items: center;
     flex-wrap: wrap;
     margin-top: 1.25rem;
+}
+
+.save-state {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    min-height: 38px;
+    padding: 0.5rem 0.8rem;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    color: var(--text-secondary);
+    background: rgba(255, 255, 255, 0.72);
+    font-size: 0.82rem;
+    font-weight: 700;
+    transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
+}
+
+.save-state::before {
+    content: '';
+    width: 8px;
+    height: 8px;
+    flex: 0 0 auto;
+    border-radius: 50%;
+    background: var(--success);
+    box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.16);
+}
+
+.save-state.is-dirty {
+    color: #b45309;
+    border-color: rgba(245, 158, 11, 0.58);
+    background: rgba(245, 158, 11, 0.12);
+    transform: translateY(-1px);
+}
+
+.save-state.is-dirty::before {
+    background: #f59e0b;
+    box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.18);
+}
+
+.btn-primary.has-unsaved-changes {
+    box-shadow: 0 12px 30px rgba(8, 164, 213, 0.3), 0 0 0 3px rgba(245, 158, 11, 0.2);
+}
+
+html[data-theme="dark"] .save-state,
+html[data-theme="blackhole"] .save-state {
+    background: rgba(7, 12, 24, 0.72);
+}
+
+html[data-theme="dark"] .save-state.is-dirty,
+html[data-theme="blackhole"] .save-state.is-dirty {
+    color: #fbbf24;
+    background: rgba(245, 158, 11, 0.1);
 }
 
 #alertContainer {
@@ -3026,6 +3079,11 @@ textarea {
 
     .btn-group {
         flex-direction: column;
+    }
+
+    .save-state {
+        width: 100%;
+        justify-content: center;
     }
 
     .btn {

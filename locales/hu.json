@@ -1,0 +1,546 @@
+{
+  "_comment": "A magyar locale a leggyakrabban használt felületeket fordítja. A hiányzó haladó szövegek automatikusan angolul jelennek meg.",
+  "lang": "hu",
+  "messages": {
+    "common": {
+      "selectOption": "Válassz egy lehetőséget"
+    },
+    "manifest": {
+      "name": "SubMaker – Feliratfordító",
+      "description": "Vedd kézbe a felirataidat! Keress és fordíts feliratokat OpenSubtitles, SubScene és SubDL forrásokból ingyenes Gemini AI-kulccsal vagy más MI-szolgáltatókkal, a Stremio elhagyása nélkül.\n\nForrásnyelvek: {sources}\nCélnyelvek: {targets}"
+    },
+    "history": {
+      "eyebrow": "Sub Toolbox",
+      "documentTitle": "Fordítási előzmények – SubMaker",
+      "title": "Fordítási előzmények",
+      "subtitle": "A különböző eszközökkel készített fordítások áttekintése",
+      "cachedLabel": "Gyorsítótárazva",
+      "status": {
+        "completed": "Kész",
+        "failed": "Sikertelen",
+        "processing": "Folyamatban"
+      }
+    },
+    "config": {
+      "uiLanguageLabel": "Felület",
+      "uiLanguageAria": "A felület nyelve",
+      "uiLanguages": {
+        "en": { "label": "English", "flag": "US" },
+        "es": { "label": "Español", "flag": "ES" },
+        "pt-br": { "label": "Português (Brasil)", "flag": "BR" },
+        "pt-pt": { "label": "Português (Portugal)", "flag": "PT" },
+        "ar": { "label": "العربية", "flag": "SA" },
+        "hu": { "label": "Magyar", "flag": "HU" }
+      },
+      "heroTitle": "SubMaker",
+      "heroSubtitle": "MI-alapú feliratfordítás",
+      "documentTitle": "SubMaker – Beállítás",
+      "quickStatsStatus": "Állapot",
+      "quickStatsConfigure": "Beállítás",
+      "quickStatsToolbox": "Eszköztár",
+      "quickStatsLastSave": "Utolsó mentés",
+      "quickActionHelp": "Súgó",
+      "partials": {
+        "loadError": "A(z) {src} betöltése sikertelen ({status})",
+        "loadFallback": "A(z) {src} betöltése sikertelen"
+      },
+      "footer": {
+        "love": "Készült <span class=\"footer-heart\">❤️</span>-tel minden Stremio-felhasználónak",
+        "thanks": "Köszönjük, hogy a SubMakert használod! A támogatásod segít mindenki számára elérhetőbbé tenni a tartalmakat."
+      },
+      "quickSetup": {
+        "title": "Gyors beállítás",
+        "entryDesc": "Most kezded? Kevesebb mint egy perc alatt elkészülhetsz",
+        "openAria": "A gyorsbeállító megnyitása",
+        "close": "Bezárás",
+        "back": "← Vissza",
+        "next": "Tovább →",
+        "reviewInstall": "Áttekintés és telepítés →",
+        "stepOf": "{current}. lépés / {total}",
+        "step1": {
+          "title": "Mit szeretnél csinálni?",
+          "subtitle": "Válaszd ki, hogyan kezelje a SubMaker a feliratokat",
+          "modeTranslateTitle": "Feliratok fordítása",
+          "modeTranslateDesc": "Feliratok keresése és lefordítása a saját nyelvedre MI segítségével",
+          "modeTranslateBadge": "Ajánlott",
+          "modeFetchTitle": "Csak feliratok keresése",
+          "modeFetchDesc": "Feliratok letöltése változtatás nélkül, MI-fordítás nélkül"
+        },
+        "step2": {
+          "title": "Feliratforrások",
+          "subtitle": "Honnan keressen feliratokat a SubMaker?",
+          "autoEnabled": "Automatikusan bekapcsolva",
+          "opensubsDesc": "A legnagyobb felirat-adatbázis – API-kulcs nélkül",
+          "opensubsAuthToggle": "🔐 Van OpenSubtitles-fiókom",
+          "optional": "nem kötelező",
+          "opensubsUsernamePlaceholder": "OpenSubtitles-felhasználónév",
+          "opensubsPasswordPlaceholder": "OpenSubtitles-jelszó",
+          "testBtn": "Teszt",
+          "opensubsRateNote": "Napi 20 felirat.",
+          "opensubsCreateAccount": "Ingyenes fiók létrehozása",
+          "opensubsCreateAccountSuffix": "ha még nincs fiókod.",
+          "opensubsAuthHint": "A bejelentkezett felhasználók magasabb limiteket és VIP-funkciókat kapnak.",
+          "optionalLabel": "Opcionális",
+          "subdlDesc": "További feliratforrás a szélesebb találati körért",
+          "subdlKeyPlaceholder": "SubDL API-kulcs megadása",
+          "subdlGetKey": "Ingyenes API-kulcs a SubDL.com oldalon",
+          "subsourceDesc": "Közösségi feliratszolgáltató",
+          "subsourceKeyPlaceholder": "SubSource API-kulcs megadása",
+          "subsourceGetKey": "Ingyenes API-kulcs a SubSource.net oldalon",
+          "noKeyNeeded": "Nem kell kulcs",
+          "keyRequired": "Kulcs szükséges",
+          "scsName": "Stremio Community Subs",
+          "scsDesc": "A Stremio közössége által gondozott feliratok",
+          "scsCommunityBadge": "Közösségi/Hitelesített",
+          "scsCommunityMode": "Közösségi token",
+          "scsAuthMode": "Saját hitelesítési kulcs",
+          "scsKeyPlaceholder": "SCS hitelesítési kulcs megadása",
+          "scsKeyNote": "Saját SCS-kulccsal gyorsabb, nyelvre szűrt kéréseket használhatsz.",
+          "scsModeNote": "Közösségi módban a SubMaker megosztott tokenje használatos; saját kulccsal csak a kiválasztott nyelvek kerülnek elküldésre.",
+          "wyzieName": "Wyzie Subs",
+          "wyzieDesc": "Ingyenes feliratgyűjtő ingyenes API-kulccsal",
+          "wyzieKeyPlaceholder": "Wyzie API-kulcs megadása",
+          "wyzieGetKey": "Ingyenes API-kulcs: sub.wyzie.io/redeem",
+          "wyzieSources": "Források:",
+          "wyzieMoreSources": "Több forrás = több felirat, de lassabb keresés"
+        },
+        "step3": {
+          "title": "MI-fordítás",
+          "subtitle": "A Gemini MI beállítása a feliratok fordításához",
+          "poweredBy": "A Google Gemini működteti",
+          "poweredByDesc": "A SubMaker a(z) {model} modellt használja gyors és pontos fordításhoz. Ehhez egy ingyenes kulcs kell a Google AI Studioból.",
+          "geminiKeyLabel": "Gemini API-kulcs",
+          "required": "*",
+          "geminiKeyPlaceholder": "Gemini API-kulcs megadása",
+          "getKeyLink": "🔑 Ingyenes API-kulcs a Google AI Studioból →",
+          "defaultModel": "Modell:",
+          "defaultModelValue": "{model}",
+          "defaultFallback": "Google Fordító tartalék:",
+          "defaultFallbackValue": "Bekapcsolva"
+        },
+        "step4": {
+          "titleTranslate": "Válaszd ki a célnyelvet",
+          "subtitleTranslate": "Milyen nyelvre szeretnéd lefordítani a feliratokat?",
+          "titleFetch": "Válaszd ki a feliratok nyelveit",
+          "subtitleFetch": "Milyen nyelvű feliratokat szeretnél keresni?",
+          "sourceLangLabel": "Forrásnyelv:",
+          "sourceLangsLabel": "Forrásnyelvek:",
+          "sourceLangChange": "módosítás",
+          "sourceLangInfo": "Forrásnyelv: <strong>angol</strong> (rögzített)",
+          "searchPlaceholder": "Nyelvek keresése…",
+          "loading": "Nyelvek betöltése…",
+          "noSelection": "Még nincs kiválasztott nyelv"
+        },
+        "step5": {
+          "title": "Extrák",
+          "subtitle": "Opcionális funkciók a jobb használati élményért",
+          "toolboxTitle": "Sub Toolbox",
+          "toolboxDesc": "Fájlok fordítása, beágyazott feliratok kinyerése, szinkronizálás és más eszközök közvetlenül a böngészőben",
+          "seasonPacksTitle": "Teljes évados feliratcsomagok",
+          "seasonPacksDesc": "Feliratok keresése és kibontása teljes évadcsomagokból a jobb lefedettségért",
+          "hideSdhTitle": "SDH/HI feliratok elrejtése",
+          "hideSdhDesc": "A hallássérülteknek szánt megjegyzéseket tartalmazó feliratok kizárása",
+          "learnTitle": "Nyelvtanulás",
+          "learnDesc": "Kétnyelvű feliratbejegyzések hozzáadása: az eredeti és a fordított sorok együtt jelennek meg"
+        },
+        "step6": {
+          "title": "Tanulandó nyelvek kiválasztása",
+          "subtitle": "Mely nyelveket szeretnéd tanulni? Mindegyikhez kétnyelvű felirat készül.",
+          "noSelection": "Még nincs kiválasztott tanulási nyelv"
+        },
+        "step7": {
+          "title": "Minden készen áll! 🎉",
+          "subtitle": "A beállításaid összefoglalása",
+          "installUrlLabel": "Telepítési URL",
+          "saveInstall": "Mentés és telepítés a Stremióba",
+          "copyInstallUrl": "Telepítési URL másolása",
+          "openAdvanced": "⚙️ Speciális beállítások megnyitása",
+          "installOnStremio": "Telepítés a Stremióba"
+        },
+        "instructions": {
+          "link": "SubMaker útmutató",
+          "eyebrow": "Gyors beállítási útmutató",
+          "title": "Mit csinál a SubMaker?",
+          "closeAria": "Útmutató bezárása",
+          "item1": "Megkeresi és megjeleníti az összes <strong>forrás-</strong> és <strong>célnyelvű</strong> feliratot.",
+          "item2": "A Stremio feliratlistájában létrehozza a <strong>„Készíts [célnyelvű] feliratot”</strong> listákat.",
+          "item3": "<strong>Minden fordítási lista sorrendje megegyezik a kiválasztott forrásnyelv feliratainak sorrendjével.</strong>",
+          "clickTitle": "Hogyan indul el a fordítás?",
+          "clickBody": "Kattints egy feliratra a fordítási listában, és a SubMaker elkezdi lefordítani a hozzá tartozó forrásfeliratot.<br>20–30 másodperc múlva töltsd be újra ugyanazt a feliratbejegyzést.<br>Ekkor már a <strong>lefordított</strong> változatnak kell megjelennie.",
+          "sourceTitle": "Egy forrásnyelv használata ajánlott",
+          "sourceBody": "A fordítási listák a forrásnyelv feliratsorrendjét követik. Így először ellenőrizheted az eredeti felirat időzítését, majd kiválaszthatod ugyanazt a sorszámú fordítást.",
+          "tip": "<strong>Tipp:</strong> Fordítás előtt a film vagy epizód közepén és végén is ellenőrizd a felirat időzítését."
+        },
+        "summary": {
+          "mode": "Mód",
+          "modeTranslate": "Feliratok fordítása",
+          "modeFetch": "Csak feliratok keresése",
+          "opensubsAuth": "Hitelesített (bejelentkezve)",
+          "opensubsV3": "V3 (bejelentkezés nélkül)",
+          "enabled": "Bekapcsolva",
+          "disabled": "Kikapcsolva",
+          "scsAuth": "Saját hitelesítési kulcs",
+          "scsCommunity": "Közösségi token",
+          "wyzieSources": "Bekapcsolva ({count} forrás)",
+          "aiTranslation": "MI-fordítás",
+          "aiConfigured": "{model}",
+          "aiNotConfigured": "Nincs beállítva",
+          "sourceLanguages": "Forrásnyelvek",
+          "targetLanguages": "Célnyelvek",
+          "subtitleLanguages": "Feliratnyelvek",
+          "none": "Nincs",
+          "seasonPacks": "Évadcsomagok",
+          "hideSdh": "SDH/HI elrejtése",
+          "learnLanguages": "Tanulandó nyelvek"
+        },
+        "status": {
+          "saving": "Beállítások mentése…",
+          "savedOk": "✓ A beállítások mentése sikerült!",
+          "copiedOk": "✓ A telepítési URL a vágólapra került!",
+          "openingStremio": "Stremio megnyitása…",
+          "enterKey": "Adj meg egy API-kulcsot",
+          "enterCredentials": "Add meg a felhasználónevet és a jelszót",
+          "validating": "Ellenőrzés…",
+          "keyValid": "✓ Az API-kulcs érvényes!",
+          "keyInvalidPrefix": "✗",
+          "keyInvalidDefault": "Érvénytelen API-kulcs – ellenőrizd újra",
+          "networkError": "✗ Hálózati hiba – próbáld újra",
+          "testingBtn": "Tesztelés…",
+          "validBtn": "Érvényes",
+          "failedBtn": "Sikertelen",
+          "validationFailed": "Az ellenőrzés sikertelen"
+        }
+      },
+      "whatsNew": {
+        "title": "Újdonságok",
+        "toggleAria": "Az újdonságlista megnyitása vagy bezárása",
+        "newUpdates": "Új frissítés érhető el!",
+        "latest": "Legújabb",
+        "viewRelease": "Teljes kiadás megtekintése a GitHubon →"
+      },
+      "tokenVault": {
+        "openAria": "A Token Vault megnyitása",
+        "ribbon": "SZÉF",
+        "profileManager": "Profilkezelő",
+        "title": "Token Vault",
+        "closeAria": "A Token Vault bezárása",
+        "profiles": "Profilok",
+        "addProfile": "Profil hozzáadása",
+        "closeAddProfileAria": "A profil hozzáadása ablak bezárása",
+        "buttonTitleActive": "Token Vault – {token}",
+        "buttonTitleEmpty": "Token Vault – az első mentés tokent hoz létre",
+        "draftAlreadyOpen": "A piszkozat már meg van nyitva. Itt hozhatsz létre, importálhatsz és menthetsz profilokat.",
+        "vaultFull": "A Token Vault megtelt. Importáláskor vagy mentéskor jóvá kell hagynod a legrégebbi token cseréjét.",
+        "createOrRestore": "Itt hozhatsz létre, importálhatsz vagy állíthatsz vissza profilokat.",
+        "emptyHint": "Ments vagy importálj egy tokent a váltható profilelőzmények használatához.",
+        "profileNumber": "{number}. profil",
+        "firstSaveCreatesToken": "Az első mentés tokent hoz létre",
+        "draftReady": "Az új piszkozat elkészült. Az oldal mentésekor új token jön létre.",
+        "draftReadyFull": "Az új piszkozat elkészült. Mentéskor jóvá kell hagynod a legrégebbi helyi token cseréjét.",
+        "stateDraft": "Piszkozat",
+        "stateOff": "Kikapcsolva",
+        "stateLost": "Elveszett",
+        "stateCurrent": "Aktuális",
+        "stateSaved": "Mentve",
+        "openDraft": "Az aktuális piszkozat megnyitása",
+        "openProfile": "{label} megnyitása",
+        "live": "Aktív",
+        "use": "Használat",
+        "enable": "Bekapcsolás",
+        "disable": "Kikapcsolás",
+        "actionsAria": "{label} műveletei"
+      },
+      "actions": {
+        "openToolbox": "Sub Toolbox megnyitása",
+        "openToolboxInline": "Felirateszköztár megnyitása",
+        "openToolboxBtn": "Felirateszköztár megnyitása",
+        "save": "Beállítások mentése",
+        "install": "Telepítés a Stremióba",
+        "copy": "Telepítési URL másolása",
+        "installLabel": "Telepítési URL"
+      },
+      "saveState": {
+        "clean": "Minden módosítás mentve",
+        "dirty": "Nem mentett módosítások"
+      },
+      "overlays": {
+        "keyboardHint": "A gyorsbillentyűkhöz nyomd meg a <span class=\"kbd\">?</span> gombot",
+        "shared": {
+          "dontShow": "Ne jelenjen meg újra",
+          "gotIt": "Értem"
+        },
+        "instructions": {
+          "eyebrow": "SubMaker útmutató",
+          "title": "Így működik a SubMaker a Stremióban",
+          "closeAria": "Útmutató bezárása",
+          "intro": "Először állítsd be a forrásnyelvek sorrendjét, majd a Stremióban válaszd a már ellenőrzött eredeti felirathoz tartozó fordítási bejegyzést.",
+          "usageTitle": "Alapbeállítás",
+          "step1": "Kapcsold be a használni kívánt szolgáltatókat a <strong>Feliratforrások</strong> résznél.",
+          "step2": "Add meg a <strong>Gemini API-kulcsodat</strong> az MI-részben.",
+          "step3": "Válassz <strong>forrásnyelvet</strong>. Általában egy nyelv használata a legjobb.",
+          "step4": "Válaszd ki a fordítási listák <strong>célnyelveit</strong>.",
+          "step5": "<strong>Telepítsd a Stremióba</strong>, majd nyisd meg egy videó feliratlistáját.",
+          "stremioTitle": "Mit ad hozzá a SubMaker a Stremióhoz?",
+          "whenTitle": "Fordítási bejegyzés használata",
+          "quickTipTitle": "Helyreállítási tipp",
+          "deliveryTitle": "A fordítás időtartama",
+          "onlyOneSourceTitle": "Egy forrásnyelv használata ajánlott",
+          "syncTipBody": "<strong>Időzítési tipp:</strong> Fordítás előtt ellenőrizd a forrásfelirat közepét és végét is."
+        },
+        "reset": {
+          "title": "A böngésző SubMaker-adatainak törlése",
+          "intro": "<strong>Ez teljes helyi visszaállítást végez ebben a böngészőben.</strong>",
+          "footer": "Az újratöltés után ez a böngésző tiszta állapotból indul.",
+          "cancel": "Mégse",
+          "confirm": "Böngészőadatok törlése"
+        }
+      },
+      "noTranslation": {
+        "title": "Csak feliratok keresése (fordítás nélkül)",
+        "description": "Az MI-fordítás kihagyása, csak a kiválasztott nyelvű feliratok keresése"
+      },
+      "sections": {
+        "apiKeysTitle": "API-kulcsok",
+        "apiKeysDescription": "Add meg és ellenőrizd a feliratforrások és fordítási szolgáltatók kulcsait.",
+        "subtitleApiTitle": "Feliratszolgáltatók API-kulcsai",
+        "languagesTitle": "Nyelvek",
+        "languagesDescription": "Válaszd ki a keresés és fordítás forrás- és célnyelveit.",
+        "languagesDescriptionNoTranslation": "Válaszd ki a keresett feliratok nyelveit.",
+        "settingsTitle": "Beállítások",
+        "settingsDescription": "A fordítás működésének és további beállításoknak a módosítása."
+      },
+      "opensubs": {
+        "title": "OpenSubtitles",
+        "implDescription": "Válaszd ki a használni kívánt OpenSubtitles-megoldást.",
+        "implementationType": "Megvalósítás típusa",
+        "v3Title": "V3 (alapértelmezett)",
+        "v3Description": "A hivatalos Stremio OpenSubtitles V3 kiegészítő használata. Nem szükséges bejelentkezés.",
+        "authTitle": "Hitelesített (ajánlott)",
+        "authDescription": "A saját OpenSubtitles.com-fiókodat használja. Felhasználónév és jelszó szükséges.",
+        "authLink": "OpenSubtitles.com-fiók",
+        "usernameLabel": "Felhasználónév",
+        "passwordLabel": "Jelszó",
+        "showHidePassword": "Jelszó megjelenítése/elrejtése",
+        "validateTitle": "OpenSubtitles-belépési adatok ellenőrzése",
+        "validateCta": "Teszt futtatása"
+      },
+      "validation": {
+        "sourceRequired": "Válassz legalább egy forrásnyelvet",
+        "sourceRange": "Válassz {min}–{max} forrásnyelvet",
+        "targetRequired": "Válassz legalább egy célnyelvet",
+        "learnRequired": "Válassz legalább egy tanulandó nyelvet",
+        "apiKeyRequired": "Adj meg egy API-kulcsot",
+        "apiKeyValid": "Az API-kulcs érvényes",
+        "credentialsRequired": "Add meg a felhasználónevet és a jelszót is",
+        "connectionError": "Kapcsolati hiba. Próbáld újra.",
+        "validationFailed": "Az ellenőrzés sikertelen",
+        "testing": "Tesztelés…",
+        "valid": "Érvényes",
+        "invalid": "Érvénytelen",
+        "error": "Hiba",
+        "testCredentials": "Belépési adatok tesztelése",
+        "test": "Teszt",
+        "geminiKeyRequired": "Gemini API-kulcs szükséges",
+        "geminiModelRequired": "Válassz Gemini-modellt",
+        "mainProviderRequired": "Válassz elsődleges szolgáltatót",
+        "subtitleProviderRequired": "Kapcsolj be legalább egy feliratszolgáltatót",
+        "apiKeyInvalid": "Érvénytelen API-kulcs",
+        "apiError": "API-hiba: {reason}"
+      },
+      "alerts": {
+        "sessionLost": "A beállítási munkamenet elveszett. Állítsd be újra és mentsd el.",
+        "loadLanguagesFailed": "A nyelvek betöltése sikertelen: {reason}",
+        "saveConfigFirst": "A Sub Toolbox megnyitása előtt mentsd el a beállításokat.",
+        "configurationSaved": "A beállítások mentve. Most már telepítheted a kiegészítőt a Stremióba.",
+        "configurationUpdated": "A beállítások frissítve. A változások azonnal életbe lépnek a Stremióban.",
+        "installUrlCopied": "A telepítési URL a vágólapra került.",
+        "openingStremio": "Stremio megnyitása…",
+        "saveFailed": "A beállítások mentése sikertelen: {reason}",
+        "newVersionDetected": "Új verzió érhető el",
+        "missingProviderKey": "A modellek betöltéséhez adj meg API-kulcsot ehhez: {provider}",
+        "loadModelsFailed": "A(z) {provider} modelljeinek betöltése sikertelen: {reason}",
+        "loadModelsSuccess": "{count} modell betöltve: {provider}"
+      },
+      "providersUi": {
+        "loadModels": "Modellek betöltése",
+        "loadModelsTitle": "Modellek lekérése",
+        "selectModel": "Modell kiválasztása",
+        "loadingModels": "Modellek betöltése…",
+        "useDefaultModel": "Alapértelmezett modell használata",
+        "selectProvider": "Szolgáltató kiválasztása",
+        "noKeyNeeded": "Nem szükséges API-kulcs",
+        "testConnection": "Kapcsolat tesztelése",
+        "title": "MI-fordítás API-kulcsai",
+        "main": {
+          "label": "Elsődleges szolgáltató",
+          "description": "Válaszd ki, melyik bekapcsolt MI-szolgáltató legyen az elsődleges."
+        },
+        "apiKey": {
+          "label": "Gemini API-kulcs",
+          "helper": "Ingyenes API-kulcs innen:",
+          "linkLabel": "Google AI Studio",
+          "placeholder": "Gemini API-kulcs megadása",
+          "validateTitle": "API-kulcs ellenőrzése",
+          "validateCta": "Teszt",
+          "showHideKey": "API-kulcs megjelenítése/elrejtése"
+        },
+        "model": {
+          "label": "Fordítási modell",
+          "helper": "A fordításhoz használt MI-modell",
+          "hintTitle": "Hibás vagy elcsúszott a fordítás, miközben az eredeti felirat jó?",
+          "hintBody": "Kattints gyorsan háromszor ugyanarra a feliratra az újrafordításhoz, vagy módosítsd a fordítási beállításokat."
+        }
+      },
+      "noTranslationCard": {
+        "title": "Feliratnyelvek",
+        "label": "Feliratnyelvek",
+        "search": "Nyelvek keresése…",
+        "quickPopular": "Népszerű",
+        "quickAll": "Mind",
+        "quickClear": "Törlés"
+      },
+      "languageCards": {
+        "search": "Nyelvek keresése…",
+        "quickPopular": "Népszerű",
+        "quickAll": "Mind",
+        "quickClear": "Törlés",
+        "sourceTitle": "Forrásnyelvek",
+        "sourceLabel": "* A fordítások forrásnyelvei",
+        "targetTitle": "Célnyelvek",
+        "targetLabel": "* A feliratok és fordítások célnyelvei",
+        "learnTitle": "Tanulandó célnyelvek",
+        "learnLabel": "A Learn Mode nyelveinek kiválasztása",
+        "extendedToggle": "Bővített nyelvlista",
+        "extendedHint": "Körülbelül 100 ritka, történelmi és regionális nyelvet ad hozzá"
+      },
+      "learnMode": {
+        "label": "Learn Mode",
+        "description": "Kétnyelvű WebVTT-feliratokat készít az eredeti és a fordított sorokkal nyelvtanuláshoz.",
+        "orderLabel": "A kétnyelvű felirat sorrendje",
+        "sourceTop": "Forrás felül – célnyelv alul",
+        "targetTop": "Célnyelv felül – forrás alul",
+        "italicLabel": "Az egyik nyelv dőlt betűvel",
+        "italicTarget": "A célnyelv legyen dőlt",
+        "italicSource": "A forrásnyelv legyen dőlt"
+      },
+      "translationSettings": {
+        "title": "Fordítási beállítások",
+        "workflow": {
+          "label": "Fordítási munkafolyamat",
+          "description": "Időzítési problémák esetén érdemes másik módot kipróbálni.",
+          "original": "Eredeti időbélyegek (régi mód)",
+          "ai": "Időbélyegek elküldése az MI-nek",
+          "xml": "XML-címkék (alapértelmezett)",
+          "json": "JSON (strukturált)"
+        }
+      },
+      "reset": {
+        "hint": "Problémád van? Állítsd vissza az alapbeállításokat →",
+        "cta": "Visszaállítás"
+      },
+      "support": {
+        "hint": "Továbbra is problémád van?",
+        "link": "Hibajegy nyitása a GitHubon"
+      }
+    },
+    "nav": {
+      "refresh": "Frissítés",
+      "refreshTitle": "Adatok frissítése",
+      "refreshLoading": "Frissítés…",
+      "refreshEmpty": "Nincs frissíthető adat",
+      "refreshError": "A frissítés sikertelen",
+      "mobileMenu": "Menü",
+      "subToolbox": "Sub Toolbox",
+      "translateFiles": "Fájlok fordítása",
+      "embeddedSubs": "Beágyazott feliratok",
+      "syncSubtitles": "Feliratok szinkronizálása",
+      "automaticSubs": "Automatikus feliratok",
+      "configure": "Beállítás",
+      "youAreHere": "Itt vagy"
+    },
+    "fileUpload": {
+      "title": "Feliratfájl fordítása",
+      "documentTitle": "Feliratfájl fordítása – SubMaker",
+      "subtitle": "Tölts fel feliratfájlokat, és fordítsd le őket a beállított MI-szolgáltatóval.",
+      "help": "Súgó",
+      "themeToggle": "Téma váltása",
+      "drop": {
+        "aria": "Feliratfájlok feltöltése",
+        "browse": "Kattints a fájlok kiválasztásához",
+        "limit": "Válassz legfeljebb {max} fájlt, vagy húzd ide őket",
+        "hint": "A feltöltéseket sorba állítjuk, és egyszerre {count} fájlt dolgozunk fel a korlátozások elkerüléséhez.",
+        "one": "egy"
+      },
+      "actions": {
+        "start": "Fordítás indítása"
+      },
+      "errors": {
+        "configMissing": "Hiányzik a beállítási token. Nyisd meg újra az oldalt a Stremióból vagy a beállítási oldalról.",
+        "noFiles": "Válassz legalább egy feliratfájlt (SRT, VTT, ASS vagy SSA).",
+        "reviewSelections": "Ellenőrizd a kiválasztott beállításokat.",
+        "translationFailed": "A fordítás sikertelen: {error}",
+        "warningPrefix": "Figyelmeztetés: ",
+        "targetMissing": "Válassz célnyelvet",
+        "sourceMissing": "DeepL-fordításhoz válassz forrásnyelvet"
+      }
+    },
+    "toolbox": {
+      "documentTitle": "Sub Toolbox – SubMaker",
+      "streamUnknown": "Nincs észlelt videó",
+      "header": {
+        "title": "SubMaker Toolbox",
+        "linked": "Kapcsolódva: {id}"
+      },
+      "hero": {
+        "eyebrow": "Sub Toolbox",
+        "title": "Felirateszközök egy helyen",
+        "body": "Használd a SubMaker eszköztárát! A mentett API-kulcsok, célnyelvek és gyorsítótár automatikusan veled maradnak.",
+        "primary": "Fordítási előzmények",
+        "secondary": "Beállítás"
+      }
+    },
+    "sync": {
+      "documentTitle": "Feliratok szinkronizálása – SubMaker",
+      "title": "Feliratok szinkronizálása",
+      "subtitle": "Igazítsd a felirat időzítését a videóhoz",
+      "sectionHeading": "Szinkronizálási beállítások",
+      "toast": {
+        "title": "Új videó észlelve",
+        "meta": "Másik epizód fut a Stremióban.",
+        "update": "Frissítés",
+        "dismiss": "Értesítés bezárása"
+      },
+      "errors": {
+        "saveFailed": "A szinkronizált felirat mentése sikertelen",
+        "metaFetchFailed": "A metaadatok lekérése sikertelen"
+      }
+    },
+    "subtitle": {
+      "loadingTitle": "A fordítás folyamatban",
+      "loadingBody": "A SubMaker éppen fordítja ezt a feliratot.",
+      "loadingTail": "Néhány másodperc múlva töltsd be újra ugyanezt a feliratot.",
+      "subToolboxLabel": "Sub Toolbox",
+      "sessionErrorTitle": "A beállítási munkamenet lejárt",
+      "sessionErrorBody": "Nyisd meg újra a SubMaker beállítási oldalát, mentsd el, majd telepítsd újra a kiegészítőt.",
+      "osAuthFailTitle": "Az OpenSubtitles-bejelentkezés sikertelen",
+      "osAuthFailBody": "Ellenőrizd a felhasználónevet és a jelszót a kiegészítő beállításaiban.",
+      "osQuotaTitle": "Elérted az OpenSubtitles napi letöltési korlátját",
+      "osAuthMissingTitle": "Hiányzó OpenSubtitles-belépési adatok",
+      "osAuthMissingBody": "Add meg az OpenSubtitles-felhasználónevet és -jelszót, vagy válts a bejelentkezés nélküli V3 módra.",
+      "invalidSubtitleTitle": "Érvénytelen felirat",
+      "providerDownloadFailTitle": "A(z) {service} feliratletöltése sikertelen",
+      "concurrencyLimitTitle": "Túl sok fordítás fut egyszerre (legfeljebb {limit})",
+      "concurrencyLimitBody": "Várd meg, amíg az egyik befejeződik, majd próbáld újra.",
+      "translationFailed": "A fordítás sikertelen",
+      "translationUnexpected": "Váratlan hiba történt a fordítás közben.",
+      "translationRetry": "Kattints újra erre a feliratra. Ha a hiba megmarad, próbálj másik feliratot vagy modellt.",
+      "translationAuth": "Érvénytelen MI API-kulcs",
+      "translationRateLimit": "A fordítási szolgáltató elérte a korlátját",
+      "translationTooLarge": "A felirat túl nagy a fordításhoz",
+      "translationFiltered": "A szolgáltató tartalomszűrője leállította a fordítást",
+      "notAvailableTitle": "A felirat nem érhető el",
+      "providerUnavailableTitle": "A feliratszolgáltató átmenetileg nem érhető el",
+      "providerUnavailableBody": "Próbáld újra néhány perc múlva, vagy válassz másik feliratot."
+    }
+  }
+}

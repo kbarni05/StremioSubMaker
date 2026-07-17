@@ -102,10 +102,11 @@
         <div class="token-vault-panel" role="dialog" aria-modal="true" aria-labelledby="tokenVaultTitle">
             <div class="token-vault-panel-header">
                 <div>
-                    <div class="token-vault-panel-eyebrow">Profile Manager</div>
-                    <h2 id="tokenVaultTitle">Token Vault</h2>
+                    <div class="token-vault-panel-eyebrow" data-i18n="config.tokenVault.profileManager">Profile Manager</div>
+                    <h2 id="tokenVaultTitle" data-i18n="config.tokenVault.title">Token Vault</h2>
                 </div>
-                <button type="button" class="token-vault-close" data-vault-action="close-vault" aria-label="Close Token Vault">&times;</button>
+                <button type="button" class="token-vault-close" data-vault-action="close-vault" aria-label="Close Token Vault"
+                    data-i18n="config.tokenVault.closeAria" data-i18n-attr="aria-label">&times;</button>
             </div>
             <div class="token-vault-panel-body" id="tokenVaultContent"></div>
         </div>
@@ -115,10 +116,11 @@
         <div class="token-vault-panel token-vault-create-panel" role="dialog" aria-modal="true" aria-labelledby="tokenVaultCreateTitle">
             <div class="token-vault-panel-header token-vault-create-header">
                 <div>
-                    <div class="token-vault-panel-eyebrow">Profiles</div>
-                    <h2 id="tokenVaultCreateTitle">Add Profile</h2>
+                    <div class="token-vault-panel-eyebrow" data-i18n="config.tokenVault.profiles">Profiles</div>
+                    <h2 id="tokenVaultCreateTitle" data-i18n="config.tokenVault.addProfile">Add Profile</h2>
                 </div>
-                <button type="button" class="token-vault-close" data-vault-action="close-creator" aria-label="Close Add Profile">&times;</button>
+                <button type="button" class="token-vault-close" data-vault-action="close-creator" aria-label="Close Add Profile"
+                    data-i18n="config.tokenVault.closeAddProfileAria" data-i18n-attr="aria-label">&times;</button>
             </div>
             <div class="token-vault-panel-body token-vault-create-body" id="tokenVaultCreateContent"></div>
             <input type="file" id="tokenVaultImportFile" accept=".json,application/json" hidden>
