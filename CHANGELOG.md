@@ -6,6 +6,9 @@ All notable changes to this project will be documented in this file.
 
 **Improvements:**
 
+- Added Hungarian (`hu`/`hu-HU`) interface support for Configure, Quick Setup, navigation, and the most common toolbox/status flows, with automatic browser-language detection and safe English fallback for untranslated advanced copy.
+- Improved the language picker with native translated language names and added an accessible saved/unsaved status next to the configuration actions, including navigation protection while server-side changes are still unsaved.
+- Documented automatic Synology Container Manager refreshes so new `latest` images published from `main` can be pulled and recreated on a schedule.
 - Added automatic multi-architecture GHCR publishing for the maintained fork, switched the default Compose deployment to `ghcr.io/kbarni05/stremiosubmaker:latest`, and retained local source builds through `docker-compose.build.yaml`.
 - Added Node 22/24 CI with automatic test discovery, dependency auditing, a real `/health` smoke test, and a Docker build gate. Release publishing now requires the same tests and emits SBOM/provenance metadata.
 - Updated the supported runtime to Node 22.12+/24 LTS, refreshed vulnerable dependencies, and added weekly Dependabot maintenance for npm, GitHub Actions, and Docker.

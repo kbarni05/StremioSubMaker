@@ -744,6 +744,10 @@
         "ar": {
           "label": "Arabic",
           "flag": "SA"
+        },
+        "hu": {
+          "label": "Magyar",
+          "flag": "HU"
         }
       },
       "heroTitle": "SubMaker",
@@ -765,6 +769,7 @@
       "quickSetup": {
         "title": "Quick Setup",
         "entryDesc": "New here? Get started in under a minute",
+        "openAria": "Open Quick Setup wizard",
         "close": "Close",
         "back": "← Back",
         "next": "Next →",
@@ -924,6 +929,45 @@
           "validationFailed": "Validation failed"
         }
       },
+      "whatsNew": {
+        "title": "What's New",
+        "toggleAria": "Toggle What's New changelog",
+        "newUpdates": "New updates available!",
+        "latest": "Latest",
+        "viewRelease": "View full release on GitHub →"
+      },
+      "tokenVault": {
+        "openAria": "Open Token Vault",
+        "ribbon": "VAULT",
+        "profileManager": "Profile Manager",
+        "title": "Token Vault",
+        "closeAria": "Close Token Vault",
+        "profiles": "Profiles",
+        "addProfile": "Add Profile",
+        "closeAddProfileAria": "Close Add Profile",
+        "buttonTitleActive": "Token Vault - {token}",
+        "buttonTitleEmpty": "Token Vault - First save creates a token",
+        "draftAlreadyOpen": "Draft already open. Create, import, or back up profiles from here.",
+        "vaultFull": "Vault full. New imports or saves will ask before replacing the oldest token.",
+        "createOrRestore": "Create, import, or restore profiles from here.",
+        "emptyHint": "Save or import a token to start building a switchable history.",
+        "profileNumber": "Profile {number}",
+        "firstSaveCreatesToken": "First save creates a token",
+        "draftReady": "Fresh draft ready. Save this page to create a new token.",
+        "draftReadyFull": "Fresh draft ready. Saving will ask before replacing the oldest local vault token.",
+        "stateDraft": "Draft",
+        "stateOff": "Off",
+        "stateLost": "Lost",
+        "stateCurrent": "Current",
+        "stateSaved": "Saved",
+        "openDraft": "Open current draft",
+        "openProfile": "Open {label}",
+        "live": "Live",
+        "use": "Use",
+        "enable": "Enable",
+        "disable": "Disable",
+        "actionsAria": "{label} actions"
+      },
       "actions": {
         "openToolbox": "Open Sub Toolbox",
         "openToolboxInline": "Open Subtitles Toolbox",
@@ -932,6 +976,10 @@
         "install": "Install in Stremio",
         "copy": "Copy Install URL",
         "installLabel": "Install URL"
+      },
+      "saveState": {
+        "clean": "All changes saved",
+        "dirty": "Unsaved changes"
       },
       "overlays": {
         "keyboardHint": "Press <span class=\"kbd\">?</span> for keyboard shortcuts",
@@ -1292,7 +1340,9 @@
         "targetLabel": "* Target languages for subtitles and translations",
         "learnTitle": "Learn Target Languages",
         "learnLabel": "Select Learn Mode Languages",
-        "learnDescription": "Creates \"Learn (Language)\" entries that pair source + translated lines in WebVTT. Select target \"Learn\" languages above after enabling."
+        "learnDescription": "Creates \"Learn (Language)\" entries that pair source + translated lines in WebVTT. Select target \"Learn\" languages above after enabling.",
+        "extendedToggle": "Extended languages list",
+        "extendedHint": "Adds about 100 rare, ancient, and regional languages (AI translation only)"
       },
       "learnMode": {
         "label": "Learn Mode",
@@ -1493,6 +1543,10 @@
       "reset": {
         "hint": "Any problems? Reset settings to default →",
         "cta": "Reset"
+      },
+      "support": {
+        "hint": "Still having issues?",
+        "link": "Open an issue on GitHub"
       }
     },
     "nav": {

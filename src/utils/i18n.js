@@ -5,6 +5,24 @@ const path = require('path');
 const localeCache = new Map();
 const DEFAULT_LANG = 'en';
 
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function mergeMessages(base, override) {
+  const result = isPlainObject(base) ? { ...base } : {};
+  if (!isPlainObject(override)) return result;
+
+  Object.entries(override).forEach(([key, value]) => {
+    if (isPlainObject(value) && isPlainObject(result[key])) {
+      result[key] = mergeMessages(result[key], value);
+    } else {
+      result[key] = value;
+    }
+  });
+  return result;
+}
+
 function deepFreeze(obj) {
   if (!obj || typeof obj !== 'object') return obj;
   Object.getOwnPropertyNames(obj).forEach((key) => {
@@ -46,12 +64,17 @@ function loadLocale(lang) {
     }
   };
 
-  const messages =
+  const baseLang = safeLang.split('-')[0];
+  const english = readLocale(DEFAULT_LANG) || {};
+  const localized =
     readLocale(safeLang) ||
+    (baseLang !== safeLang ? readLocale(baseLang) : null) ||
     (safeLang === 'pt-pt' ? readLocale('pt-br') : null) ||
-    readLocale(DEFAULT_LANG) ||
-    {};
-  const payload = { lang: messages.lang || safeLang, messages: messages.messages || {} };
+    english;
+  const messages = safeLang === DEFAULT_LANG
+    ? (english.messages || {})
+    : mergeMessages(english.messages || {}, localized.messages || {});
+  const payload = { lang: localized.lang || safeLang, messages };
 
   // Freeze to prevent accidental cross-request mutation of cached locale objects
   const frozen = deepFreeze(payload);
@@ -156,5 +179,6 @@ module.exports = {
   loadLocale,
   getTranslator,
   buildClientBootstrap,
+  mergeMessages,
   DEFAULT_LANG,
 };

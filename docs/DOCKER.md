@@ -231,6 +231,27 @@ docker compose ps
 curl --fail http://localhost:7001/health
 ```
 
+### Automatic updates on Synology
+
+Pushing or merging to this fork's `main` branch automatically publishes a new
+`ghcr.io/kbarni05/stremiosubmaker:latest` image. A running NAS container does
+not replace itself merely because that tag changed. In DSM **Control Panel →
+Task Scheduler**, create a scheduled **User-defined script**, run it as `root`,
+and use:
+
+```sh
+cd /volume1/docker/stremio-submaker || exit 1
+docker compose pull
+docker compose up -d --remove-orphans
+docker image prune -f
+```
+
+Run the task daily or weekly. Keep the Compose file and `.env` together in
+`/volume1/docker/stremio-submaker`. If DSM cannot find `docker` in scheduled
+tasks, run `command -v docker` over SSH and replace `docker` above with that
+absolute path. The `pull_policy: always` setting ensures every recreate checks
+GHCR, while the scheduled task performs the recreate itself.
+
 Use `docker compose` (Compose v2) for new installations. The older
 `docker-compose` spelling remains valid only where the standalone v1 binary is
 installed.

@@ -53,7 +53,8 @@
         </span>
     </button>
     <button class="help-button token-vault-launcher" id="tokenVaultLauncher" title="Open Token Vault"
-        aria-label="Open Token Vault" aria-expanded="false" aria-controls="tokenVaultRail" data-state="draft">
+        aria-label="Open Token Vault" aria-expanded="false" aria-controls="tokenVaultRail" data-state="draft"
+        data-i18n="config.tokenVault.openAria" data-i18n-attr="title,aria-label">
         <svg class="token-vault-launcher-icon" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
             <defs>
                 <linearGradient id="tvShield" x1="0%" y1="0%" x2="0%" y2="100%">
@@ -68,7 +69,7 @@
             <path d="M16 17v4" stroke="rgba(255,255,255,0.9)" stroke-width="1.8" stroke-linecap="round"/>
         </svg>
         <span class="token-vault-launcher-ribbon">
-            <span class="token-vault-launcher-label">VAULT</span>
+            <span class="token-vault-launcher-label" data-i18n="config.tokenVault.ribbon">VAULT</span>
         </span>
     </button>
     <div class="token-vault-rail" id="tokenVaultRail" aria-hidden="true">
@@ -101,15 +102,17 @@
                 <!-- Pixel runner character -->
                 <div class="portal-runner" aria-hidden="true"></div>
                 <div class="portal-header" id="portalHeader" role="button" tabindex="0"
-                    aria-label="Toggle What's New changelog">
+                    aria-label="Toggle What's New changelog" data-i18n="config.whatsNew.toggleAria"
+                    data-i18n-attr="aria-label">
                     <div class="portal-header-left">
                         <span class="portal-icon">✨</span>
-                        <span class="portal-title">What's New</span>
+                        <span class="portal-title" data-i18n="config.whatsNew.title">What's New</span>
                         <span class="portal-version-badge" id="portalVersionBadge"></span>
                     </div>
                     <div class="portal-header-right">
                         <span class="portal-new-dot" id="portalNewDot" style="display:none;"
-                            title="New updates available!"></span>
+                            title="New updates available!" data-i18n="config.whatsNew.newUpdates"
+                            data-i18n-attr="title"></span>
                         <span class="portal-toggle-arrow" id="portalToggleArrow">▼</span>
                     </div>
                 </div>
@@ -123,7 +126,8 @@
 
         <!-- Quick Setup Entry Banner (shown on first run or via help menu) -->
         <div class="qs-entry-banner" id="quickSetupBanner" role="button" tabindex="0"
-            aria-label="Open Quick Setup wizard">
+            aria-label="Open Quick Setup wizard" data-i18n="config.quickSetup.openAria"
+            data-i18n-attr="aria-label">
             <span class="qs-entry-icon">⚡</span>
             <div class="qs-entry-text">
                 <span class="qs-entry-title" data-i18n="config.quickSetup.title">Quick Setup</span>
@@ -2674,7 +2678,9 @@
 
         <!-- Actions -->
         <div class="btn-group">
-            <button type="submit" class="btn btn-primary" accesskey="enter">
+            <div class="save-state is-clean" id="saveState" role="status" aria-live="polite"
+                data-i18n="config.saveState.clean">All changes saved</div>
+            <button type="submit" class="btn btn-primary" id="saveConfigBtn" accesskey="enter">
                 <span aria-hidden="true">💾</span>
                 <span data-i18n="config.actions.save">Save Configuration</span>
             </button>

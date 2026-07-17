@@ -60,12 +60,14 @@
             bootstrapTranslator(data || DEFAULT_LOCALE);
             applyUiLanguageCopy();
             applyStaticCopy();
+            refreshLocalizedDynamicUi();
             notifyLocaleUpdated();
         } catch (err) {
             console.warn('[i18n] Failed to load locale, falling back to English', err);
             bootstrapTranslator(DEFAULT_LOCALE);
             applyUiLanguageCopy();
             applyStaticCopy();
+            refreshLocalizedDynamicUi();
             notifyLocaleUpdated();
         }
     }
@@ -74,6 +76,13 @@
     function notifyLocaleUpdated() {
         try {
             window.dispatchEvent(new CustomEvent('submaker:locale-updated'));
+        } catch (_) { }
+    }
+
+    function refreshLocalizedDynamicUi() {
+        try {
+            updateTokenVaultButtonState();
+            renderTokenVaultRail({ forceContent: true });
         } catch (_) { }
     }
 
@@ -209,6 +218,12 @@
         setAttr('subToolboxLauncher', 'title', 'config.actions.openToolbox', 'Open Sub Toolbox');
         setAttr('subToolboxLauncher', 'aria-label', 'config.actions.openToolbox', 'Open Sub Toolbox');
         setAttr('configHelp', 'title', 'config.quickActionHelp', 'Help');
+        document.querySelectorAll('.portal-entry-badge.latest').forEach(node => {
+            node.textContent = tConfig('config.whatsNew.latest', {}, 'Latest');
+        });
+        document.querySelectorAll('.portal-gh-link').forEach(node => {
+            node.textContent = tConfig('config.whatsNew.viewRelease', {}, 'View full release on GitHub →');
+        });
         setText('apiKeysSectionTitle', 'config.sections.apiKeysTitle', 'API Keys');
         setText('apiKeysSectionDescription', 'config.sections.apiKeysDescription', 'Add and validate your keys for subtitle providers and translation services.');
         setText('languagesSectionTitle', 'config.sections.languagesTitle', 'Languages');
@@ -263,6 +278,7 @@
         setText('learnLanguagesError', 'config.validation.learnRequired', 'Please select at least one learn language');
         applyDataI18n();
         refreshComboboxTranslations();
+        renderSaveState();
         // Reapply any dynamic copy that depends on runtime values (e.g., language limits)
         try { updateLanguageLimitCopy(); } catch (_) { }
     }
@@ -382,6 +398,13 @@
             flagKey: 'config.uiLanguages.ar.flag',
             fallbackLabel: 'Arabic',
             fallbackFlag: 'SA'
+        },
+        {
+            value: 'hu',
+            labelKey: 'config.uiLanguages.hu.label',
+            flagKey: 'config.uiLanguages.hu.flag',
+            fallbackLabel: 'Magyar',
+            fallbackFlag: 'HU'
         }
     ];
     const KEY_OPTIONAL_PROVIDERS = new Set(['googletranslate', 'custom']);
@@ -782,14 +805,17 @@
             'es': 'ES',
             'pt-br': 'BR',
             'pt-pt': 'PT',
-            'ar': 'AR'
+            'ar': 'AR',
+            'hu': 'HU'
         };
-        const label = codeLabelMap[entry.value] || entry.value.toUpperCase();
+        const shortLabel = codeLabelMap[entry.value] || entry.value.toUpperCase();
+        const label = tConfig(entry.labelKey, {}, entry.fallbackLabel || shortLabel);
         const translatedFlag = tConfig(entry.flagKey, {}, entry.fallbackFlag || entry.value.toUpperCase());
         const emojiFlag = toFlagEmoji(translatedFlag) || toFlagEmoji(entry.fallbackFlag) || translatedFlag || entry.fallbackFlag || entry.value.toUpperCase();
         return {
             ...entry,
             label,
+            shortLabel,
             flag: emojiFlag
         };
     }
@@ -807,7 +833,7 @@
         const meta = getUiLanguageMeta(lang);
         const valueEl = document.getElementById('uiLanguageValue');
         if (valueEl) {
-            valueEl.textContent = meta.label || meta.value.toUpperCase();
+            valueEl.textContent = meta.shortLabel || meta.value.toUpperCase();
         }
         const flagEl = document.getElementById('uiLanguageFlag');
         if (flagEl) {
@@ -1547,7 +1573,7 @@ Translate to {target_language}.`;
 
     function buildDefaultVaultLabel(profileNumber) {
         const resolvedNumber = Math.max(1, Number(profileNumber) || 1);
-        return `Profile ${resolvedNumber}`;
+        return tConfig('config.tokenVault.profileNumber', { number: resolvedNumber }, `Profile ${resolvedNumber}`);
     }
 
     function deriveVaultLabel(token, explicitLabel, options = {}) {
@@ -2250,9 +2276,12 @@ Translate to {target_language}.`;
         if (!button) return;
         const state = getActiveTokenState();
         button.dataset.state = state;
-        button.setAttribute('title', isValidSessionToken(activeSessionContext.token)
-            ? `Token Vault - ${maskToken(activeSessionContext.token)}`
-            : 'Token Vault - First save creates a token');
+        const maskedToken = maskToken(activeSessionContext.token);
+        const title = isValidSessionToken(activeSessionContext.token)
+            ? tConfig('config.tokenVault.buttonTitleActive', { token: maskedToken }, `Token Vault - ${maskedToken}`)
+            : tConfig('config.tokenVault.buttonTitleEmpty', {}, 'Token Vault - First save creates a token');
+        button.setAttribute('title', title);
+        button.setAttribute('aria-label', title);
         scheduleFloatingBottomSafeZoneSync();
     }
 
@@ -2797,10 +2826,12 @@ Translate to {target_language}.`;
     }
 
     function getVaultStateLabel(state, isActiveToken = false) {
-        if (state === 'draft') return 'Draft';
-        if (state === 'disabled') return 'Off';
-        if (state === 'recovered') return 'Lost';
-        return isActiveToken ? 'Current' : 'Saved';
+        if (state === 'draft') return tConfig('config.tokenVault.stateDraft', {}, 'Draft');
+        if (state === 'disabled') return tConfig('config.tokenVault.stateOff', {}, 'Off');
+        if (state === 'recovered') return tConfig('config.tokenVault.stateLost', {}, 'Lost');
+        return isActiveToken
+            ? tConfig('config.tokenVault.stateCurrent', {}, 'Current')
+            : tConfig('config.tokenVault.stateSaved', {}, 'Saved');
     }
 
     function getVaultRailEntries() {
@@ -2823,11 +2854,17 @@ Translate to {target_language}.`;
 
         if (!isValidSessionToken(activeToken)) {
             const draftView = buildTokenVaultViewModel('');
+            const draftMessage = String(activeSessionContext.message || '');
+            const draftMeta = draftMessage.includes('replacing the oldest local vault token')
+                ? tConfig('config.tokenVault.draftReadyFull', {}, 'Fresh draft ready. Saving will ask before replacing the oldest local vault token.')
+                : (draftMessage.includes('Fresh draft ready')
+                    ? tConfig('config.tokenVault.draftReady', {}, 'Fresh draft ready. Save this page to create a new token.')
+                    : tConfig('config.tokenVault.firstSaveCreatesToken', {}, 'First save creates a token'));
             entries.push({
                 key: 'draft',
                 ...draftView,
                 railLabel: draftView.label,
-                railMeta: activeSessionContext.message || 'First save creates a token'
+                railMeta: draftMeta
             });
         } else {
             pushToken(activeToken);
@@ -2851,12 +2888,12 @@ Translate to {target_language}.`;
         const store = getTokenVaultStore();
         const draftAlreadyActive = !activeToken && activeSessionContext.provenance === 'draft';
         const savedCount = getTokenVaultDisplayCount(store, activeToken);
-        const addTokenLabel = 'Add Profile';
+        const addTokenLabel = tConfig('config.tokenVault.addProfile', {}, 'Add Profile');
         const addTokenMeta = draftAlreadyActive
-            ? 'Draft already open. Create, import, or back up profiles from here.'
+            ? tConfig('config.tokenVault.draftAlreadyOpen', {}, 'Draft already open. Create, import, or back up profiles from here.')
             : (savedCount >= TOKEN_VAULT_MAX_ENTRIES
-                ? 'Vault full. New imports or saves will ask before replacing the oldest token.'
-                : 'Create, import, or restore profiles from here.');
+                ? tConfig('config.tokenVault.vaultFull', {}, 'Vault full. New imports or saves will ask before replacing the oldest token.')
+                : tConfig('config.tokenVault.createOrRestore', {}, 'Create, import, or restore profiles from here.'));
         const addTokenHtml = `<button type="button" class="token-vault-rail-add" data-vault-action="open-creator" style="--vault-index:0;">
             <span class="token-vault-rail-add-icon" aria-hidden="true">+</span>
             <span class="token-vault-rail-add-main">
@@ -2886,8 +2923,8 @@ Translate to {target_language}.`;
         let markup = '';
         if (entries.length === 0) {
             markup = `${addTokenHtml}<div class="token-vault-rail-empty" style="--vault-index:1;">
-                <strong>Token Vault</strong>
-                <span>Save or import a token to start building a switchable history.</span>
+                <strong>${escapeVaultHtml(tConfig('config.tokenVault.title', {}, 'Token Vault'))}</strong>
+                <span>${escapeVaultHtml(tConfig('config.tokenVault.emptyHint', {}, 'Save or import a token to start building a switchable history.'))}</span>
             </div>`;
         } else {
             markup = addTokenHtml + entries.map((entry, index) => {
@@ -2901,8 +2938,8 @@ Translate to {target_language}.`;
                 const menuOpen = menuKey && tokenVaultRailMenuKey === menuKey;
 
                 const openLabel = entry.isDraft
-                    ? 'Open current draft'
-                    : `Open ${entry.railLabel}`;
+                    ? tConfig('config.tokenVault.openDraft', {}, 'Open current draft')
+                    : tConfig('config.tokenVault.openProfile', { label: entry.railLabel }, `Open ${entry.railLabel}`);
 
                 return `<article class="token-vault-rail-item ${escapeVaultHtml(entry.state)} ${entry.isActiveToken ? 'is-active' : ''} ${menuOpen ? 'menu-open' : ''}" style="--vault-index:${index + 1};">
                     <button type="button" class="token-vault-rail-main" data-vault-action="manage-token"${actionTokenAttr} aria-label="${escapeVaultHtml(openLabel)}">
@@ -2913,10 +2950,10 @@ Translate to {target_language}.`;
                         <span class="token-vault-rail-meta">${escapeVaultHtml(entry.railMeta)}</span>
                     </button>
                     <div class="token-vault-rail-actions">
-                        <button type="button" class="token-vault-rail-shortcut" data-vault-action="switch-token" data-token="${escapeVaultHtml(entry.token || '')}" ${switchDisabled ? 'disabled' : ''}>${entry.isActiveToken ? 'Live' : 'Use'}</button>
-                        ${canToggle ? `<button type="button" class="token-vault-rail-shortcut ${entry.disabled ? '' : 'danger'}" data-vault-action="toggle-state" data-token="${escapeVaultHtml(entry.token)}">${entry.disabled ? 'Enable' : 'Disable'}</button>` : ''}
+                        <button type="button" class="token-vault-rail-shortcut" data-vault-action="switch-token" data-token="${escapeVaultHtml(entry.token || '')}" ${switchDisabled ? 'disabled' : ''}>${escapeVaultHtml(entry.isActiveToken ? tConfig('config.tokenVault.live', {}, 'Live') : tConfig('config.tokenVault.use', {}, 'Use'))}</button>
+                        ${canToggle ? `<button type="button" class="token-vault-rail-shortcut ${entry.disabled ? '' : 'danger'}" data-vault-action="toggle-state" data-token="${escapeVaultHtml(entry.token)}">${escapeVaultHtml(entry.disabled ? tConfig('config.tokenVault.enable', {}, 'Enable') : tConfig('config.tokenVault.disable', {}, 'Disable'))}</button>` : ''}
                         <div class="token-vault-rail-menu ${menuOpen ? 'is-open' : ''}">
-                            <button type="button" class="token-vault-rail-menu-toggle" data-vault-action="toggle-rail-menu" data-menu-key="${escapeVaultHtml(menuKey)}"${actionTokenAttr} aria-haspopup="menu" aria-expanded="${menuOpen ? 'true' : 'false'}" aria-controls="tokenVaultRailFloatingMenu" aria-label="${escapeVaultHtml(`${entry.railLabel} actions`)}"><span class="token-vault-rail-menu-dots" aria-hidden="true"><span></span><span></span><span></span></span></button>
+                            <button type="button" class="token-vault-rail-menu-toggle" data-vault-action="toggle-rail-menu" data-menu-key="${escapeVaultHtml(menuKey)}"${actionTokenAttr} aria-haspopup="menu" aria-expanded="${menuOpen ? 'true' : 'false'}" aria-controls="tokenVaultRailFloatingMenu" aria-label="${escapeVaultHtml(tConfig('config.tokenVault.actionsAria', { label: entry.railLabel }, `${entry.railLabel} actions`))}"><span class="token-vault-rail-menu-dots" aria-hidden="true"><span></span><span></span><span></span></span></button>
                         </div>
                     </div>
                 </article>`;
@@ -3602,13 +3639,39 @@ Translate to {target_language}.`;
         if (installUrlBox) installUrlBox.classList.remove('show');
     }
 
+    function renderSaveState() {
+        const status = document.getElementById('saveState');
+        const saveButton = document.getElementById('saveConfigBtn');
+        const key = configDirty ? 'config.saveState.dirty' : 'config.saveState.clean';
+        const fallback = configDirty ? 'Unsaved changes' : 'All changes saved';
+
+        if (status) {
+            status.classList.toggle('is-dirty', configDirty);
+            status.classList.toggle('is-clean', !configDirty);
+            status.textContent = tConfig(key, {}, fallback);
+        }
+        if (saveButton) {
+            saveButton.classList.toggle('has-unsaved-changes', configDirty);
+        }
+        if (document.body) {
+            document.body.toggleAttribute('data-config-dirty', configDirty);
+        }
+    }
+
     function setConfigDirty(nextDirty) {
         const isDirty = nextDirty === true;
         if (isDirty) {
             hideActiveInstallState();
         }
         configDirty = isDirty;
+        renderSaveState();
     }
+
+    window.addEventListener('beforeunload', (event) => {
+        if (!configDirty) return;
+        event.preventDefault();
+        event.returnValue = '';
+    });
 
     function persistCurrentDraftToCache() {
         try {
@@ -11795,7 +11858,7 @@ Translate to {target_language}.`;
                     if (idx === 0) {
                         const badgeEl = document.createElement('span');
                         badgeEl.className = 'portal-entry-badge latest';
-                        badgeEl.textContent = 'Latest';
+                        badgeEl.textContent = tConfig('config.whatsNew.latest', {}, 'Latest');
                         left.appendChild(badgeEl);
                     }
                     headerEl.appendChild(left);
@@ -11815,7 +11878,7 @@ Translate to {target_language}.`;
                     ghLink.href = 'https://github.com/xtremexq/StremioSubMaker/releases/tag/v' + entry.version;
                     ghLink.target = '_blank';
                     ghLink.rel = 'noopener noreferrer';
-                    ghLink.textContent = 'View full release on GitHub →';
+                    ghLink.textContent = tConfig('config.whatsNew.viewRelease', {}, 'View full release on GitHub →');
 
                     headerEl.addEventListener('click', () => {
                         card.classList.toggle('expanded');

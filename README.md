@@ -46,6 +46,7 @@ Check their [FREE Stremio Addons Guide](https://stremio-addons-guide.elfhosted.c
 | Category | Highlights |
 |----------|------------|
 | **Languages** | 197 supported languages (433 for translation) |
+| **Interface** | English, Spanish, Portuguese, Arabic, and Hungarian (`hu`/`hu-HU`) |
 | **Subtitle Sources** | OpenSubtitles, SubDL, SubSource, Wyzie, Stremio Community, Subs.ro |
 | **AI Translation** | 10+ providers: Gemini, OpenAI, Claude, DeepL, DeepSeek, Grok, Mistral, OpenRouter, Cloudflare, Custom/Local |
 | **Smart Caching** | Shared translation database — translate once, benefit everyone |
