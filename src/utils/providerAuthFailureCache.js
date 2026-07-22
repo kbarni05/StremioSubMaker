@@ -1,9 +1,17 @@
 const crypto = require('crypto');
 const log = require('./logger');
+const { createBoundedCache, normalizePositiveInteger } = require('./boundedCache');
 
 const PROVIDER_AUTH_FAILURE_TTL_MS = 10 * 60 * 1000;
 const PROVIDER_AUTH_FAILURE_PREFIX = 'provider_auth_fail:';
-const localAuthFailureCache = new Map();
+const PROVIDER_AUTH_FAILURE_CACHE_MAX = normalizePositiveInteger(
+  process.env.PROVIDER_AUTH_FAILURE_CACHE_MAX,
+  5000
+);
+const localAuthFailureCache = createBoundedCache({
+  max: PROVIDER_AUTH_FAILURE_CACHE_MAX,
+  ttl: PROVIDER_AUTH_FAILURE_TTL_MS
+});
 
 function getProviderAuthFailureCacheKey(provider, apiKey) {
   const providerKey = String(provider || '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '_');
@@ -101,6 +109,7 @@ function resetProviderAuthFailureCache() {
 
 module.exports = {
   PROVIDER_AUTH_FAILURE_TTL_MS,
+  PROVIDER_AUTH_FAILURE_CACHE_MAX,
   getProviderAuthFailureCacheKey,
   hasCachedProviderAuthFailure,
   cacheProviderAuthFailure,

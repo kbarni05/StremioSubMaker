@@ -14,6 +14,7 @@ const { encryptUserConfig, decryptUserConfig, normalizeSensitiveInputsForStorage
 const { redactToken } = require('./security');
 const { getRedisPassword } = require('./redisHelper');
 const { MAX_SESSION_BRIEF_BATCH, SESSION_BRIEF_LOOKUP_CONCURRENCY, normalizeSessionBriefTokens } = require('./sessionBriefBatch');
+const { scheduleNonOverlappingInterval } = require('./backgroundInterval');
 
 // Cache decrypted configs briefly to avoid redundant decryption on rapid navigation
 const DECRYPTED_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
@@ -2235,7 +2236,7 @@ class SessionManager extends EventEmitter {
             clearInterval(this.saveTimer);
         }
 
-        this.saveTimer = setInterval(async () => {
+        this.saveTimer = scheduleNonOverlappingInterval(async () => {
             if (this.dirty) {
                 try {
                     await this.saveToDisk();
@@ -2382,8 +2383,12 @@ class SessionManager extends EventEmitter {
             clearInterval(this.sessionIndexVerifyTimer);
         }
 
-        this.sessionIndexVerifyTimer = setInterval(() => {
-            this.verifySessionIndex().catch(err => log.error(() => ['[SessionManager] Session index verify failed:', err.message]));
+        this.sessionIndexVerifyTimer = scheduleNonOverlappingInterval(async () => {
+            try {
+                await this.verifySessionIndex();
+            } catch (err) {
+                log.error(() => ['[SessionManager] Session index verify failed:', err.message]);
+            }
         }, SESSION_INDEX_VERIFY_INTERVAL_MS);
 
         // Allow process exit
@@ -2437,7 +2442,7 @@ class SessionManager extends EventEmitter {
         // Run cleanup every hour (less frequent than auto-save)
         const cleanupInterval = 60 * 60 * 1000; // 1 hour
 
-        this.cleanupTimer = setInterval(async () => {
+        this.cleanupTimer = scheduleNonOverlappingInterval(async () => {
             try {
                 const now = Date.now();
                 const memoryThreshold = 30 * 24 * 60 * 60 * 1000; // 30 days - sessions older than this in memory get evicted

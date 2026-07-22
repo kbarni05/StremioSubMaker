@@ -12,6 +12,7 @@ const log = require('../utils/logger');
 const { isTrueishFlag } = require('../utils/subtitleFlags');
 const { detectArchiveType, extractSubtitleFromArchive, isArchive, createEpisodeNotFoundSubtitle, createZipTooLargeSubtitle, convertSubtitleToVtt } = require('../utils/archiveExtractor');
 const { analyzeResponseContent, createInvalidResponseSubtitle } = require('../utils/responseAnalyzer');
+const { createBoundedCache, normalizePositiveInteger } = require('../utils/boundedCache');
 
 const OPENSUBTITLES_API_URL = 'https://api.opensubtitles.com/api/v1';
 const OPENSUBTITLES_VIP_API_URL = 'https://vip-api.opensubtitles.com/api/v1';
@@ -19,15 +20,30 @@ const USER_AGENT = `SubMaker v${version}`;
 const MAX_ZIP_BYTES = 25 * 1024 * 1024; // hard cap for ZIP downloads (~25MB) to avoid huge packs
 
 const AUTH_FAILURE_TTL_MS = 10 * 60 * 1000; // Suppress repeated bad-credential logins for 10 minutes
-const credentialFailureCache = new Map();
+const OPENSUBTITLES_AUTH_FAILURE_CACHE_MAX = normalizePositiveInteger(
+  process.env.OPENSUBTITLES_AUTH_FAILURE_CACHE_MAX,
+  5000
+);
+const credentialFailureCache = createBoundedCache({
+  max: OPENSUBTITLES_AUTH_FAILURE_CACHE_MAX,
+  ttl: AUTH_FAILURE_TTL_MS
+});
 const AUTH_FAILURE_PREFIX = 'osauthfail:';
 
 // MULTI-INSTANCE FIX: Token cache is now backed by Redis for cross-pod sharing
 // Local Map is used as L1 cache for same-process performance
 // Redis is the source of truth, checked when local cache misses
-const tokenCacheLocal = new Map();
 const TOKEN_CACHE_PREFIX = 'ostoken:';
 const TOKEN_TTL_SECONDS = 23 * 60 * 60; // 23 hours (token valid for 24h, 1h buffer)
+const OPENSUBTITLES_TOKEN_CACHE_MAX = normalizePositiveInteger(
+  process.env.OPENSUBTITLES_TOKEN_CACHE_MAX,
+  5000
+);
+const tokenCacheLocal = createBoundedCache({
+  max: OPENSUBTITLES_TOKEN_CACHE_MAX,
+  ttl: TOKEN_TTL_SECONDS * 1000,
+  updateAgeOnGet: false
+});
 
 // Login mutex: prevents multiple concurrent /login calls for the same credentials
 // Key: credentialsCacheKey, Value: Promise that resolves when login completes
@@ -839,7 +855,9 @@ async function getCachedToken(cacheKey) {
         // Check if token is still valid
         if (Date.now() < parsed.expiry - 60000) {
           // Populate local cache for future same-process calls
-          tokenCacheLocal.set(cacheKey, parsed);
+          tokenCacheLocal.set(cacheKey, parsed, {
+            ttl: Math.max(1000, parsed.expiry - Date.now())
+          });
           log.debug(() => '[OpenSubtitles] Token loaded from Redis (cross-pod cache)');
           return parsed;
         }
@@ -870,7 +888,9 @@ async function setCachedToken(cacheKey, token, expiry, baseUrl = null) {
   }
 
   // L1: Store in local cache
-  tokenCacheLocal.set(cacheKey, data);
+  tokenCacheLocal.set(cacheKey, data, {
+    ttl: Math.max(1000, expiry - Date.now())
+  });
 
   // L2: Store in Redis for cross-pod sharing
   try {

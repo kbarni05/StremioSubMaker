@@ -8,6 +8,7 @@ const log = require('./logger');
 const { handleCaughtError } = require('./errorClassifier');
 const { StorageFactory, StorageAdapter } = require('../storage');
 const videoHashAssociations = require('./videoHashAssociations');
+const { createBoundedCache, normalizePositiveInteger } = require('./boundedCache');
 
 let storageAdapter = null;
 
@@ -17,11 +18,16 @@ const CACHE_TYPE = StorageAdapter.CACHE_TYPES.SMDB;
 const MAX_OVERRIDES_PER_HOUR = 3;
 const OVERRIDE_WINDOW_MS = 60 * 60 * 1000; // 1 hour
 // In-memory override tracker (keyed by uploaderHash → array of timestamps)
-const overrideTracker = new Map();
+const OVERRIDE_TRACKER_MAX = normalizePositiveInteger(process.env.SMDB_OVERRIDE_TRACKER_MAX, 10000);
+const overrideTracker = createBoundedCache({
+    max: OVERRIDE_TRACKER_MAX,
+    ttl: OVERRIDE_WINDOW_MS,
+    updateAgeOnGet: true
+});
 
 // Index for per-video language listings (avoids SCAN in hot paths)
 const INDEX_VERSION = 1;
-const MAX_LANGUAGES_PER_VIDEO = 100;
+const MAX_LANGUAGES_PER_VIDEO = 250;
 
 async function getStorageAdapter() {
     if (!storageAdapter) {
@@ -76,7 +82,9 @@ async function persistIndex(adapter, indexKey, entries) {
     for (const entry of entries) {
         byLang.set(entry.languageCode, entry);
     }
-    const unique = Array.from(byLang.values()).slice(0, MAX_LANGUAGES_PER_VIDEO);
+    const unique = Array.from(byLang.values())
+        .sort((a, b) => (Number(b.timestamp) || 0) - (Number(a.timestamp) || 0))
+        .slice(0, MAX_LANGUAGES_PER_VIDEO);
     await adapter.set(indexKey, { version: INDEX_VERSION, entries: unique }, CACHE_TYPE);
 }
 
@@ -231,11 +239,10 @@ async function getSubtitleMultiHash(videoHashes, langCode) {
         if (!videoHashes || !videoHashes.length || !langCode) return null;
         const uniqueHashes = [...new Set(videoHashes.filter(Boolean))];
 
-        for (const hash of uniqueHashes) {
-            const sub = await getSubtitle(hash, langCode);
-            if (sub) return { ...sub, videoHash: hash };
-        }
-        return null;
+        const results = await Promise.all(uniqueHashes.map(hash => getSubtitle(hash, langCode)));
+        const firstMatchIndex = results.findIndex(Boolean);
+        if (firstMatchIndex < 0) return null;
+        return { ...results[firstMatchIndex], videoHash: uniqueHashes[firstMatchIndex] };
     } catch (error) {
         handleCaughtError(error, `[SMDB] getSubtitleMultiHash failed`, log);
         return null;
@@ -282,7 +289,11 @@ function checkOverrideLimit(uploaderHash) {
 
     // Filter to only those within the last hour
     const recent = timestamps.filter(ts => now - ts <= OVERRIDE_WINDOW_MS);
-    overrideTracker.set(key, recent);
+    if (recent.length > 0) {
+        overrideTracker.set(key, recent);
+    } else {
+        overrideTracker.delete(key);
+    }
 
     const remaining = Math.max(0, MAX_OVERRIDES_PER_HOUR - recent.length);
     return {
@@ -401,4 +412,16 @@ module.exports = {
     exists,
     saveHashMapping: videoHashAssociations.saveHashMapping,
     getAssociatedHashes: videoHashAssociations.getAssociatedHashes
+};
+
+module.exports.__testing = {
+    setStorageAdapter(adapter) {
+        storageAdapter = adapter;
+    },
+    reset() {
+        storageAdapter = null;
+        overrideTracker.clear();
+    },
+    MAX_LANGUAGES_PER_VIDEO,
+    OVERRIDE_TRACKER_MAX
 };

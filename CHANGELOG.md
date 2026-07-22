@@ -6,6 +6,11 @@ All notable changes to this project will be documented in this file.
 
 **Improvements:**
 
+- Bounded request-controlled authentication, token, key-health, rotation, SMDB, and Sentry caches with TTL-aware LRU eviction to prevent long-running public instances from accumulating unbounded process memory.
+- Made cache cleanup, session maintenance, and storage cleanup intervals non-overlapping, removed duplicate bypass-cache maintenance, and replaced a periodic full Redis session scan with the maintained O(1) session index.
+- Parallelized multi-hash SMDB subtitle lookups while preserving hash priority, and expanded/reordered the per-video language index so the newest subtitle is retained when the index reaches its limit.
+- Removed the unused `got-scraping` dependency and its 50-package transitive chain, eliminating the crafted-ZIP high-memory-allocation vulnerability reported by `npm audit` while reducing install/image size.
+- Added an explicit Watchtower opt-in label to the published Compose deployment and documented Watchtower as the preferred automatic-update path when it is already installed.
 - Added Hungarian (`hu`/`hu-HU`) interface support for Configure, Quick Setup, navigation, and the most common toolbox/status flows, with automatic browser-language detection and safe English fallback for untranslated advanced copy.
 - Improved the language picker with native translated language names and added an accessible saved/unsaved status next to the configuration actions, including navigation protection while server-side changes are still unsaved.
 - Documented automatic Synology Container Manager refreshes so new `latest` images published from `main` can be pulled and recreated on a schedule.
@@ -18,6 +23,7 @@ All notable changes to this project will be documented in this file.
 
 **Bug Fixes:**
 
+- Fixed full SMDB indexes discarding a newly uploaded language in favor of the oldest indexed entry, and stopped slow background jobs from starting a second copy of themselves before the first run completes.
 - Fixed custom-provider SSRF validation for bracketed private IPv6 and canonicalized IPv4-mapped IPv6 literals, with regression coverage.
 - Fixed the public `npm test` and release-test commands so they no longer reference files missing from the repository.
 - Fixed Windows-1250 Serbian Latin subtitle decoding while preserving Windows-1251 Serbian Cyrillic support for explicit and ambiguous language hints.
