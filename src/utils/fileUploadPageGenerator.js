@@ -2294,7 +2294,7 @@ function generateFileTranslationPage(videoId, configStr, config, filename = '') 
                                     ${escapeHtml(temperatureLabel)}
                                     <span class="label-description">${escapeHtml(temperatureHelper)}</span>
                                 </label>
-                                <input type="number" id="advancedTemperature" min="0" max="2" step="0.1" value="0.8" placeholder="0.8">
+                                <input type="number" id="advancedTemperature" min="0" max="1" step="0.1" value="1" placeholder="1">
                             </div>
 
                             <div class="form-group" id="reasoningEffortGroup">

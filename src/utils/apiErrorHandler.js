@@ -138,8 +138,14 @@ function parseApiError(error, serviceName = 'API', options = {}) {
   if (error.response) {
     parsed.statusCode = error.response.status;
 
+    // Request timeout (408)
+    if (parsed.statusCode === 408) {
+      parsed.type = 'timeout';
+      parsed.isRetryable = true;
+      parsed.userMessage = translate('apiErrors.timeout', {}, 'Request timed out. Please try again.');
+    }
     // Rate limiting (429)
-    if (parsed.statusCode === 429) {
+    else if (parsed.statusCode === 429) {
       parsed.type = 'rate_limit';
       parsed.isRetryable = true;
       parsed.userMessage = buildRateLimitUserMessage(serviceLabel, translate);
@@ -220,7 +226,7 @@ function parseApiError(error, serviceName = 'API', options = {}) {
       parsed.type = 'timeout';
       parsed.isRetryable = true;
       parsed.userMessage = translate('apiErrors.timeout', {}, 'Request timed out. Please try again.');
-    } else if (error.code === 'ECONNRESET' || error.code === 'ECONNREFUSED') {
+    } else if (error.code === 'ECONNRESET' || error.code === 'ECONNREFUSED' || error.code === 'EAI_AGAIN' || error.code === 'ENETUNREACH') {
       parsed.type = 'network';
       parsed.isRetryable = true;
       parsed.userMessage = translate('apiErrors.network', {}, 'Network connection failed. Please check your internet connection.');

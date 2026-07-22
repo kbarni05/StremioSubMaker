@@ -215,18 +215,20 @@ function getDefaultProviderParameters() {
  */
 const OVERRIDE_DEPRECATED_MODELS = true;
 const GEMINI_31_FLASH_LITE_MODEL = 'gemini-3.1-flash-lite';
-const GEMINI_FLASH_LATEST_MODEL = 'gemini-flash-latest';
-const DEFAULT_GEMINI_MODEL = 'gemini-flash-lite-latest';
+const DEFAULT_GEMINI_MODEL = GEMINI_31_FLASH_LITE_MODEL;
+const GEMINI_MODEL_MIGRATIONS = Object.freeze({
+  'gemini-3.1-flash-lite-preview': GEMINI_31_FLASH_LITE_MODEL,
+  'gemini-3-flash-preview': 'gemini-3.5-flash',
+  'gemini-3-pro-preview': 'gemini-3.1-pro-preview',
+  'gemini-2.5-pro-preview-05-06': 'gemini-2.5-pro',
+  'gemini-2.5-flash-preview-09-2025': 'gemini-2.5-flash',
+  'gemini-2.5-flash-lite-preview-09-2025': 'gemini-2.5-flash-lite',
+  'gemini-2.5-flash-lite-09-2025': 'gemini-2.5-flash-lite'
+});
 
 function normalizeGeminiModelName(modelName) {
   const normalized = typeof modelName === 'string' ? modelName.trim() : '';
-  if (normalized === `${GEMINI_31_FLASH_LITE_MODEL}-preview`) {
-    return GEMINI_31_FLASH_LITE_MODEL;
-  }
-  if (normalized === GEMINI_FLASH_LATEST_MODEL) {
-    return DEFAULT_GEMINI_MODEL;
-  }
-  return normalized;
+  return GEMINI_MODEL_MIGRATIONS[normalized] || normalized;
 }
 
 /**
@@ -235,12 +237,7 @@ function normalizeGeminiModelName(modelName) {
  */
 const DEPRECATED_MODEL_NAMES = [
   'gemini-2.0-flash-exp',
-  'gemini-2.5-flash-lite-09-2025', // Old name before preview version
-  GEMINI_FLASH_LATEST_MODEL,
-  'gemini-2.5-flash-latest',
-  'gemini-pro-latest',
-  'gemini-2.5-pro-latest',
-  'gemini-2.5-flash-preview-09-2025' // Renamed to gemini-2.5-flash
+  'gemini-pro-latest'
 ];
 
 /**
@@ -1105,33 +1102,33 @@ const MODEL_SPECIFIC_DEFAULTS = {
     thinkingBudget: 0,      // No thinking for lite model
     temperature: 0.8        // Higher temperature for creativity
   },
-  'gemini-2.5-flash-lite-preview-09-2025': {
-    thinkingBudget: 0,      // No thinking for lite model
-    temperature: 0.8        // Higher temperature for creativity
-  },
   'gemini-2.5-flash': {
     thinkingBudget: -1,     // Dynamic thinking for flash model
     temperature: 0.5        // Lower temperature for consistency
   },
-  'gemini-3-flash-preview': {
-    thinkingBudget: -1,     // Dynamic thinking for flash model
-    temperature: 0.5        // Lower temperature for consistency
+  'gemini-3.5-flash': {
+    thinkingBudget: 0,      // Mapped to low thinking for Gemini 3.x
+    temperature: 1          // Gemini 3.x uses model-default sampling
   },
   'gemini-3.1-flash-lite': {
-    thinkingBudget: 0,      // No thinking for lite model
-    temperature: 0.8        // Higher temperature for creativity
+    thinkingBudget: 0,      // Mapped to low thinking for Gemini 3.x
+    temperature: 1          // Gemini 3.x uses model-default sampling
   },
   'gemini-flash-lite-latest': {
-    thinkingBudget: 0,      // No thinking for lite model (latest alias)
-    temperature: 0.8        // Higher temperature for creativity
+    thinkingBudget: 0,
+    temperature: 1
+  },
+  'gemini-flash-latest': {
+    thinkingBudget: 0,
+    temperature: 1
   },
   'gemini-2.5-pro': {
     thinkingBudget: 1000,   // Fixed thinking budget for pro model
     temperature: 0.5        // Lower temperature for consistency
   },
-  'gemini-3-pro-preview': {
-    thinkingBudget: 1000,   // Fixed thinking budget for pro model
-    temperature: 0.5        // Lower temperature for consistency
+  'gemini-3.1-pro-preview': {
+    thinkingBudget: 8192,   // Mapped to medium thinking for Gemini 3.x
+    temperature: 1
   }
 };
 
@@ -1172,7 +1169,7 @@ function getDefaultConfig(modelName = null) {
   const advancedSettings = {
     maxOutputTokens: parseInt(process.env.GEMINI_MAX_OUTPUT_TOKENS) || 65536,
     chunkSize: 12000,
-    translationTimeout: parseInt(process.env.GEMINI_TRANSLATION_TIMEOUT) || 720, // seconds
+    translationTimeout: parseInt(process.env.GEMINI_TRANSLATION_TIMEOUT) || 240, // seconds
     maxRetries: process.env.GEMINI_MAX_RETRIES !== undefined ? parseInt(process.env.GEMINI_MAX_RETRIES) : 3,
     // When enabled, trust the AI to return timestamps for each batch instead of reusing originals
     sendTimestampsToAI: process.env.SEND_TIMESTAMPS_TO_AI === 'true',

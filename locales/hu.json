@@ -391,6 +391,62 @@
           "hintBody": "Kattints gyorsan háromszor ugyanarra a feliratra az újrafordításhoz, vagy módosítsd a fordítási beállításokat."
         }
       },
+      "gemini": {
+        "apiKey": {
+          "label": "Gemini API-kulcs",
+          "helper": "Ingyenes API-kulcs innen:",
+          "linkLabel": "Google AI Studio",
+          "placeholder": "Gemini API-kulcs megadása",
+          "validateTitle": "API-kulcs ellenőrzése",
+          "validateCta": "Teszt",
+          "showHideKey": "API-kulcs megjelenítése/elrejtése",
+          "showKey": "API-kulcs megjelenítése",
+          "hideKey": "API-kulcs elrejtése"
+        },
+        "model": {
+          "label": "Fordítási modell",
+          "helper": "A fordításhoz használt Gemini-modell",
+          "options": {
+            "flashLite31": "Gemini 3.1 Flash-Lite",
+            "flash35": "Gemini 3.5 Flash",
+            "pro31": "Gemini 3.1 Pro (előzetes)",
+            "flashLite": "Gemini 2.5 Flash-Lite",
+            "flash": "Gemini 2.5 Flash"
+          },
+          "retranslationHintTitle": "Hibás vagy elcsúszott a fordítás, miközben az eredeti felirat jó?",
+          "retranslationHintBody": "Kattints gyorsan háromszor ugyanarra a feliratra az újrafordításhoz, vagy módosítsd a fordítási beállításokat.",
+          "betaTitle": "A Pro modellek használata korlátozott lehet.",
+          "betaAdvice": "Sebességhez és stabil működéshez a Flash-Lite ajánlott.",
+          "rateWarningTitle": "Ingyenes csomag korlátozása:",
+          "rateWarningBody": "A Pro modellek gyorsabban elérhetik a Gemini használati korlátját (HTTP 429)."
+        }
+      },
+      "advancedGemini": {
+        "cardTitle": "Speciális Gemini-paraméterek",
+        "title": "Speciális beállítások",
+        "infoTitle": "A Gemini működésének finomhangolása:",
+        "infoBody": "Felülírhatod az alapértelmezett modellt és a támogatott mintavételi paramétereket.",
+        "cacheNotePrefix": "Ha módosítasz egy Gemini-alapbeállítást,",
+        "cacheNoteStrong": "a gyorsítótár megkerülése automatikusan bekapcsol",
+        "cacheNoteSuffix": "így a kísérleti fordítások nem kerülnek a közös adatbázisba.",
+        "model": {
+          "label": "Fordítási modell felülírása",
+          "description": "Hagyd üresen a stabil Gemini 3.1 Flash-Lite alapmodell használatához.",
+          "default": "Alapértelmezett modell használata"
+        },
+        "thinking": {
+          "label": "Gondolkodási szint",
+          "description": "Gemini 2.5: 0 kikapcsolja, -1 dinamikussá teszi. Gemini 3.x: a 0, az 1–8192 és a nagyobb érték alacsony, közepes és magas szintre képeződik le."
+        },
+        "temperature": {
+          "label": "Hőmérséklet (kreativitás)",
+          "description": "Gemini 2.5 esetén 0,0–1,0 között állítható. Gemini 3.x-nél a megbízhatóság érdekében a modell alapértéke használatos."
+        },
+        "topP": {
+          "label": "Top-P (magmintavételezés)",
+          "description": "Valószínűségi küszöb 0,0–1,0 között. Gemini 3.x esetén a modell alapértéke használatos."
+        }
+      },
       "noTranslationCard": {
         "title": "Feliratnyelvek",
         "label": "Feliratnyelvek",

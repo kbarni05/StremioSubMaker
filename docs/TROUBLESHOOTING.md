@@ -105,7 +105,7 @@ Stremio on Android makes only 1 request for subtitles and caches it. Mobile Mode
 
 | Provider | Key Format | Notes |
 |----------|------------|-------|
-| Gemini | `AIza...` | Free at [Google AI Studio](https://makersuite.google.com/app/apikey) |
+| Gemini | `AIza...` | Free at [Google AI Studio](https://aistudio.google.com/app/api-keys) |
 | OpenSubtitles | Username + Password | V3 mode needs no auth, Auth mode recommended |
 | SubSource | API key | Get from [subsource.net/api-docs](https://subsource.net/api-docs) |
 | SubDL | API key | Get from [subdl.com/panel/api](https://subdl.com/panel/api) |
