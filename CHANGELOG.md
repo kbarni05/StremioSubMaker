@@ -4,29 +4,57 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
-**Improvements:**
+No changes yet.
 
-- Bounded request-controlled authentication, token, key-health, rotation, SMDB, and Sentry caches with TTL-aware LRU eviction to prevent long-running public instances from accumulating unbounded process memory.
-- Made cache cleanup, session maintenance, and storage cleanup intervals non-overlapping, removed duplicate bypass-cache maintenance, and replaced a periodic full Redis session scan with the maintained O(1) session index.
-- Parallelized multi-hash SMDB subtitle lookups while preserving hash priority, and expanded/reordered the per-video language index so the newest subtitle is retained when the index reaches its limit.
-- Removed the unused `got-scraping` dependency and its 50-package transitive chain, eliminating the crafted-ZIP high-memory-allocation vulnerability reported by `npm audit` while reducing install/image size.
-- Added an explicit Watchtower opt-in label to the published Compose deployment and documented Watchtower as the preferred automatic-update path when it is already installed.
-- Added Hungarian (`hu`/`hu-HU`) interface support for Configure, Quick Setup, navigation, and the most common toolbox/status flows, with automatic browser-language detection and safe English fallback for untranslated advanced copy.
-- Improved the language picker with native translated language names and added an accessible saved/unsaved status next to the configuration actions, including navigation protection while server-side changes are still unsaved.
-- Documented automatic Synology Container Manager refreshes so new `latest` images published from `main` can be pulled and recreated on a schedule.
-- Added automatic multi-architecture GHCR publishing for the maintained fork, switched the default Compose deployment to `ghcr.io/kbarni05/stremiosubmaker:latest`, and retained local source builds through `docker-compose.build.yaml`.
-- Added Node 22/24 CI with automatic test discovery, dependency auditing, a real `/health` smoke test, and a Docker build gate. Release publishing now requires the same tests and emits SBOM/provenance metadata.
-- Updated the supported runtime to Node 22.12+/24 LTS, refreshed vulnerable dependencies, and added weekly Dependabot maintenance for npm, GitHub Actions, and Docker.
-- Made the Express app importable without binding a port and extracted the health endpoint into a dedicated route module as the first incremental step toward a smaller application entrypoint.
-- Added a rate-limited translation-status API with sanitized batch/entry progress, safe multi-instance fallback, and retained completed/failed state that never blocks retries.
-- Added a reproducible installation and update guide for local, Windows, Docker Compose, and fork-sync workflows.
+## SubMaker v1.5.1
+
+**New Features:**
+
+- **Added a Hungarian interface:** Configure, Quick Setup, navigation, and the most common toolbox/status flows now support `hu` and `hu-HU`, including automatic browser-language detection and safe English fallback for advanced untranslated text.
+
+- **Published a maintained multi-architecture Docker image:** the fork now automatically publishes `ghcr.io/kbarni05/stremiosubmaker` for `linux/amd64` and `linux/arm64`, with immutable commit tags, SBOM, and provenance metadata.
+
+- **Added automatic update support:** the default Compose deployment includes an opt-in Watchtower label, while the documentation covers Watchtower and Synology Container Manager update workflows.
+
+**Performance:**
+
+- **Bounded long-running process caches:** request-controlled authentication, token, key-health, rotation, SMDB, and Sentry caches now use TTL-aware LRU eviction instead of growing without a fixed entry limit.
+
+- **Removed expensive recurring Redis work:** cache metrics use the maintained O(1) session count instead of scanning the complete session keyspace every 30 minutes, and duplicate bypass-cache maintenance was removed.
+
+- **Accelerated SMDB cache lookups:** multi-hash subtitle reads now execute concurrently while preserving deterministic hash priority.
+
+- **Reduced dependency and image size:** removed the unused `got-scraping` package and its 50-package transitive dependency chain.
+
+**Reliability:**
+
+- **Prevented overlapping maintenance jobs:** cache cleanup, session maintenance, storage cleanup, metrics, and integrity checks no longer start another run while the previous run is still active, and recover cleanly after failures.
+
+- **Improved SMDB index retention:** per-video language indexes keep the newest entries when the configured limit is reached and support more languages per video.
+
+- **Strengthened automated verification:** Node 22/24 CI now runs automatic test discovery, dependency auditing, a real `/health` smoke test, and a Docker build gate before changes are merged.
+
+- **Modernized the supported runtime:** Node 22.12+ and Node 24 LTS are supported, vulnerable dependencies were refreshed, and Dependabot maintains npm, Actions, and Docker dependencies weekly.
+
+- **Made the application easier to test:** the Express app can be imported without binding a network port, the health route is isolated, and translation-job status has bounded, rate-limited multi-instance-safe reporting.
+
+**UI and Documentation:**
+
+- **Improved configuration feedback:** the language picker shows native translated names, configuration actions expose an accessible saved/unsaved state, and navigation warns before abandoning server-side changes.
+
+- **Expanded installation and update guidance:** local, Windows, Docker Compose, fork synchronization, Watchtower, and Synology deployment paths are documented reproducibly.
 
 **Bug Fixes:**
 
-- Fixed full SMDB indexes discarding a newly uploaded language in favor of the oldest indexed entry, and stopped slow background jobs from starting a second copy of themselves before the first run completes.
-- Fixed custom-provider SSRF validation for bracketed private IPv6 and canonicalized IPv4-mapped IPv6 literals, with regression coverage.
-- Fixed the public `npm test` and release-test commands so they no longer reference files missing from the repository.
-- Fixed Windows-1250 Serbian Latin subtitle decoding while preserving Windows-1251 Serbian Cyrillic support for explicit and ambiguous language hints.
+- **Fixed full SMDB indexes losing new subtitles:** a newly uploaded language no longer gets discarded in favor of an older indexed entry.
+
+- **Fixed custom-provider SSRF validation:** bracketed private IPv6 and canonicalized IPv4-mapped IPv6 literals are rejected with regression coverage.
+
+- **Fixed release test commands:** public `npm test` and release verification no longer reference files missing from the repository.
+
+- **Fixed Serbian subtitle decoding:** Windows-1250 Serbian Latin decoding is preserved alongside Windows-1251 Serbian Cyrillic support for explicit and ambiguous language hints.
+
+- **Removed an audited high-severity dependency path:** eliminating the unused scraping dependency also removes the crafted-ZIP high-memory-allocation vulnerability previously reported by `npm audit`.
 
 ## SubMaker v1.4.88
 
