@@ -2906,7 +2906,7 @@ app.post('/api/gemini-models', async (req, res) => {
             getEffectiveGeminiModel(resolvedConfig),
             resolvedConfig?.advancedSettings || {}
         );
-        const models = await gemini.getAvailableModels({ silent: true });
+        const models = await gemini.getAvailableModels({ silent: true, throwOnError: true });
 
         // Filter to only show translation-capable Gemini models (pro/flash/gemma variants).
         // Include Gemma family (e.g., tgemma) for advanced override use cases.
@@ -2918,10 +2918,17 @@ app.post('/api/gemini-models', async (req, res) => {
         res.json(filteredModels);
     } catch (error) {
         log.error(() => '[API] Error fetching Gemini models:', error);
-        // Surface upstream error details if available for easier debugging in UI
-        const message = error?.response?.data?.error || error?.response?.data?.message || error.message || 'Failed to fetch models';
+        const upstreamError = error?.response?.data?.error || error?.response?.data?.message;
+        const message = typeof upstreamError === 'string'
+            ? upstreamError
+            : (upstreamError?.message || error.message || 'Failed to fetch models');
+        const status = Number(error?.response?.status || error?.statusCode || 0);
         const t = res.locals?.t || getTranslatorFromRequest(req, res);
-        res.status(500).json({ error: t('server.errors.modelsFailed', { reason: message }, message) });
+        res.status(status === 401 || status === 403 ? 401 : (status === 408 || status === 429 || status >= 500 ? 503 : 500))
+            .json({
+                error: t('server.errors.modelsFailed', { reason: message }, message),
+                retryable: status === 408 || status === 429 || status >= 500
+            });
     }
 });
 
@@ -3350,34 +3357,17 @@ app.post('/api/validate-gemini', validationLimiter, async (req, res) => {
             });
         }
 
-        const axios = require('axios');
-        const { httpAgent, httpsAgent } = require('./src/utils/httpAgents');
-
-        // Use v1 endpoint and API key header for validation
-        const geminiUrl = 'https://generativelanguage.googleapis.com/v1/models';
-
         try {
-            const response = await axios.get(geminiUrl, {
-                headers: { 'x-goog-api-key': geminiApiKey },
-                timeout: 10000,
-                httpAgent,
-                httpsAgent
-            });
+            const gemini = new GeminiService(geminiApiKey, undefined, { translationTimeout: 10 });
+            const models = await gemini.getAvailableModels({ silent: true, throwOnError: true });
 
             await clearCachedProviderAuthFailure(geminiAuthFailureCacheKey);
-
-            // If we got here without errors, API key is valid
-            if (response.data && response.data.models) {
-                res.json({
-                    valid: true,
-                    message: t('server.validation.apiKeyValid', {}, 'API key is valid')
-                });
-            } else {
-                res.json({
-                    valid: true,
-                    message: t('server.validation.apiKeyValid', {}, 'API key is valid')
-                });
-            }
+            res.json({
+                valid: true,
+                modelCount: models.length,
+                recommendedModel: 'gemini-3.1-flash-lite',
+                message: t('server.validation.apiKeyValid', {}, 'API key is valid')
+            });
         } catch (apiError) {
             // Check for authentication errors
             if (apiError.response?.status === 401 || apiError.response?.status === 403) {
@@ -3403,7 +3393,16 @@ app.post('/api/validate-gemini', validationLimiter, async (req, res) => {
                     error: t('server.errors.invalidApiKey', {}, errorMessage)
                 });
             } else {
-                throw apiError;
+                const status = Number(apiError?.response?.status || apiError?.statusCode || 0);
+                const upstream = apiError?.response?.data?.error || apiError?.response?.data?.message;
+                const reason = typeof upstream === 'string'
+                    ? upstream
+                    : (upstream?.message || apiError.message || 'Gemini API is temporarily unavailable');
+                return res.status(status === 408 || status === 429 || status >= 500 ? 503 : 500).json({
+                    valid: false,
+                    retryable: status === 408 || status === 429 || status >= 500,
+                    error: t('server.validation.apiError', { reason }, `API error: ${reason}`)
+                });
             }
         }
     } catch (error) {
@@ -3413,8 +3412,10 @@ app.post('/api/validate-gemini', validationLimiter, async (req, res) => {
             error.message?.toLowerCase().includes('invalid') ||
             error.message?.toLowerCase().includes('permission');
 
-        res.json({
+        const status = Number(error?.response?.status || error?.statusCode || 0);
+        res.status(isAuthError ? 200 : (status === 408 || status === 429 || status >= 500 ? 503 : 500)).json({
             valid: false,
+            retryable: !isAuthError && (status === 408 || status === 429 || status >= 500),
             error: isAuthError
                 ? (res.locals?.t || getTranslatorFromRequest(req, res))('server.errors.invalidApiKey', {}, 'Invalid API key')
                 : (res.locals?.t || getTranslatorFromRequest(req, res))('server.validation.apiError', { reason: error.message }, `API error: ${error.message}`)

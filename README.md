@@ -70,7 +70,7 @@ Check their [FREE Stremio Addons Guide](https://stremio-addons-guide.elfhosted.c
 
 | Provider | Notes |
 |----------|-------|
-| **Google Gemini** | Default, free tier available, key rotation supported |
+| **Google Gemini** | Default: stable Gemini 3.1 Flash-Lite; key rotation and structured JSON supported |
 | OpenAI | GPT models |
 | Anthropic | Claude models |
 | DeepL | Traditional translation API |
@@ -190,6 +190,11 @@ Enable "Advanced Mode" in Other Settings to unlock:
 - Batch Context (surrounding context for coherence)
 - Mismatch Retries (retry on wrong entry count)
 - Gemini Parameters (temperature, top-p, thinking budget)
+
+Gemini 2.5 and Gemini 3.x use different thinking controls. Keep the default value
+unless you need to tune it: the UI sends token budgets to 2.5 models and safely
+maps the same control to low/medium/high thinking for 3.x. Internal model thoughts
+are never included in subtitle output.
 
 ---
 

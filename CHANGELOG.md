@@ -6,6 +6,50 @@ All notable changes to this project will be documented in this file.
 
 No changes yet.
 
+## SubMaker v1.5.2
+
+**New Features:**
+
+- **Modern Gemini model support:** Gemini 3.x requests now use supported qualitative thinking levels, the stable Gemini 3.1 Flash-Lite model is the default, and the model selector includes Gemini 3.5 Flash and Gemini 3.1 Pro Preview.
+
+- **Reliable structured subtitle output:** JSON translation mode now sends an explicit subtitle schema with required IDs and text while remaining compatible with Gemini thinking.
+
+- **Actionable Gemini diagnostics:** API-key validation and model discovery distinguish invalid credentials from temporary timeouts, rate limits, and Google service failures instead of silently returning an empty model list.
+
+**Performance:**
+
+- **Removed duplicate prompt payloads:** workflow prompts that already contain a subtitle batch are no longer followed by a second copy, reducing request size, token usage, latency, and conflicting model context.
+
+- **Shared bounded model metadata cache:** model limits are cached across Gemini service instances with TTL, size bounds, and in-flight request deduplication, reducing repeated API calls during key rotation and concurrent translations.
+
+- **Faster API-key rotation:** a rate-limited key immediately yields to another configured key instead of exhausting local retries first.
+
+**Reliability:**
+
+- **Server-aware retries:** transient HTTP 408/429/5xx and network failures use bounded jittered exponential backoff while honoring `Retry-After` and Google retry metadata.
+
+- **Complete paginated model discovery:** every Gemini model page is fetched, normalized, deduplicated, and filtered for generation support, with stable fallback choices during temporary discovery outages.
+
+- **Safer request configuration:** Gemini 3.x no longer receives unsupported legacy numeric thinking budgets or custom sampling values, while Gemini 2.5 Flash receives an explicit zero when thinking is disabled and Gemini 2.5 Pro keeps its required thinking behavior.
+
+- **Expanded regression coverage:** 12 focused Gemini tests cover thinking compatibility, prompt construction, thought filtering, JSON schemas, retry timing, key rotation, transient failures, and paginated discovery.
+
+**UI and Documentation:**
+
+- **Updated English and Hungarian Gemini controls:** model names, advanced thinking help, temperature limits, Pro warnings, Quick Setup defaults, and fallback labels now match the current API behavior.
+
+- **Refreshed environment guidance:** `.env.example` documents stable models, Gemini 2.5 versus 3.x thinking behavior, the shorter reliability-focused timeout, bounded model caching, and server-aware retries.
+
+**Bug Fixes:**
+
+- **Removed reasoning leakage from subtitles:** Gemini response parts marked as internal thoughts are excluded from normal and streaming output, preventing sighs, analysis, and model commentary from appearing in translated subtitles.
+
+- **Fixed dynamic thinking:** `-1` is now sent as Gemini's documented dynamic budget instead of `null`, and an explicit zero actually disables thinking on compatible Gemini 2.5 Flash models.
+
+- **Fixed false safety errors and empty responses:** safety blocks require a real block reason, empty final output becomes retryable, and additional blocked finish reasons are classified consistently.
+
+- **Fixed stale model selections:** retired preview identifiers migrate to supported replacements instead of causing opaque API failures.
+
 ## SubMaker v1.5.1
 
 **New Features:**

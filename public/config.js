@@ -986,18 +986,20 @@ Translate to {target_language}.`;
      * Each model has its own optimal settings for thinking and temperature
      */
     const GEMINI_31_FLASH_LITE_MODEL = 'gemini-3.1-flash-lite';
-    const GEMINI_FLASH_LATEST_MODEL = 'gemini-flash-latest';
-    const DEFAULT_GEMINI_MODEL = 'gemini-flash-lite-latest';
+    const DEFAULT_GEMINI_MODEL = GEMINI_31_FLASH_LITE_MODEL;
+    const GEMINI_MODEL_MIGRATIONS = Object.freeze({
+        'gemini-3.1-flash-lite-preview': GEMINI_31_FLASH_LITE_MODEL,
+        'gemini-3-flash-preview': 'gemini-3.5-flash',
+        'gemini-3-pro-preview': 'gemini-3.1-pro-preview',
+        'gemini-2.5-pro-preview-05-06': 'gemini-2.5-pro',
+        'gemini-2.5-flash-preview-09-2025': 'gemini-2.5-flash',
+        'gemini-2.5-flash-lite-preview-09-2025': 'gemini-2.5-flash-lite',
+        'gemini-2.5-flash-lite-09-2025': 'gemini-2.5-flash-lite'
+    });
 
     function normalizeGeminiModelName(modelName) {
         const normalized = typeof modelName === 'string' ? modelName.trim() : '';
-        if (normalized === `${GEMINI_31_FLASH_LITE_MODEL}-preview`) {
-            return GEMINI_31_FLASH_LITE_MODEL;
-        }
-        if (normalized === GEMINI_FLASH_LATEST_MODEL) {
-            return DEFAULT_GEMINI_MODEL;
-        }
-        return normalized;
+        return GEMINI_MODEL_MIGRATIONS[normalized] || normalized;
     }
 
     const MODEL_SPECIFIC_DEFAULTS = {
@@ -1006,37 +1008,33 @@ Translate to {target_language}.`;
             thinkingBudget: 0,
             temperature: 0.7
         },
-        'gemini-2.5-flash-lite-preview-09-2025': {
-            thinkingBudget: 0,
-            temperature: 0.7
-        },
         'gemini-2.5-flash': {
             thinkingBudget: -1,
             temperature: 0.5
         },
-        'gemini-3-flash-preview': {
-            thinkingBudget: -1,
-            temperature: 0.5
-        },
-        'gemini-3-flash-preview': {
-            thinkingBudget: -1,
-            temperature: 0.5
+        'gemini-3.5-flash': {
+            thinkingBudget: 0,
+            temperature: 1
         },
         'gemini-3.1-flash-lite': {
             thinkingBudget: 0,
-            temperature: 0.8
+            temperature: 1
         },
         'gemini-flash-lite-latest': {
             thinkingBudget: 0,
-            temperature: 0.8
+            temperature: 1
+        },
+        'gemini-flash-latest': {
+            thinkingBudget: 0,
+            temperature: 1
         },
         'gemini-2.5-pro': {
             thinkingBudget: 1000,
             temperature: 0.5
         },
-        'gemini-3-pro-preview': {
-            thinkingBudget: 1000,
-            temperature: 0.5
+        'gemini-3.1-pro-preview': {
+            thinkingBudget: 8192,
+            temperature: 1
         }
     };
 
@@ -1097,7 +1095,7 @@ Translate to {target_language}.`;
 
     function getDefaultGeminiModelOptionLabel() {
         const label = getGeminiModelOptionLabel(getDefaultGeminiModelOption());
-        return label || 'Gemini Flash Lite Latest';
+        return label || 'Gemini 3.1 Flash-Lite';
     }
 
     function getFirstGeminiModelOptionValue() {
@@ -1106,12 +1104,6 @@ Translate to {target_language}.`;
 
     function normalizeGeminiModelForBaseSelect(modelName) {
         let normalized = typeof modelName === 'string' ? modelName.trim() : '';
-        if (normalized === 'gemini-2.5-pro-preview-05-06') {
-            normalized = 'gemini-2.5-pro';
-        }
-        if (normalized === 'gemini-2.5-flash-preview-09-2025') {
-            normalized = 'gemini-2.5-flash';
-        }
         normalized = normalizeGeminiModelName(normalized);
 
         const optionValues = getGeminiModelSelectOptionValues();
@@ -1164,7 +1156,7 @@ Translate to {target_language}.`;
             const raw = matchKey ? incoming[matchKey] : {};
             const defaults = defaultParams[key] || {};
             merged[key] = {
-                temperature: sanitizeNumber(raw?.temperature, defaults.temperature, 0, 2),
+                temperature: sanitizeNumber(raw?.temperature, defaults.temperature, 0, key === 'gemini' ? 1 : 2),
                 topP: sanitizeNumber(raw?.topP, defaults.topP, 0, 1),
                 maxOutputTokens: sanitizeNumber(raw?.maxOutputTokens, defaults.maxOutputTokens, 1, 200000),
                 translationTimeout: sanitizeNumber(raw?.translationTimeout, defaults.translationTimeout, 5, 720),
@@ -9855,7 +9847,8 @@ Translate to {target_language}.`;
             clearTimeout(timeoutId);
 
             if (!response.ok) {
-                throw new Error('Failed to fetch models');
+                const payload = await response.json().catch(() => ({}));
+                throw new Error(payload.error || 'Failed to fetch models');
             }
 
             const models = await response.json();
@@ -9877,7 +9870,9 @@ Translate to {target_language}.`;
 
         } catch (error) {
             if (statusDiv) {
-                statusDiv.innerHTML = '✗ Failed to fetch models. Check your API key.';
+                statusDiv.textContent = error.name === 'AbortError'
+                    ? 'Model lookup timed out. Please try again.'
+                    : (error.message || 'Failed to fetch models. Please try again.');
                 statusDiv.className = 'model-status error';
 
                 setTimeout(() => {
@@ -9900,12 +9895,12 @@ Translate to {target_language}.`;
         // Define hardcoded multi-model options
         const hardcodedModels = [
 
-            { name: 'gemini-3.1-flash-lite', displayName: 'Gemini 3.1 Flash Lite' },
+            { name: 'gemini-3.1-flash-lite', displayName: 'Gemini 3.1 Flash-Lite' },
+            { name: 'gemini-3.5-flash', displayName: 'Gemini 3.5 Flash' },
+            { name: 'gemini-3.1-pro-preview', displayName: 'Gemini 3.1 Pro (preview)' },
             { name: 'gemini-2.5-flash-lite', displayName: 'Gemini 2.5 Flash-Lite' },
             { name: 'gemini-2.5-flash', displayName: 'Gemini 2.5 Flash' },
-            { name: 'gemini-3-flash-preview', displayName: 'Gemini 3.0 Flash (beta)' },
-            { name: 'gemini-2.5-pro', displayName: 'Gemini 2.5 Pro (beta)' },
-            { name: 'gemini-3-pro-preview', displayName: 'Gemini 3.0 Pro (beta)' }
+            { name: 'gemini-2.5-pro', displayName: 'Gemini 2.5 Pro' }
         ];
 
         // Track added models to avoid duplicates

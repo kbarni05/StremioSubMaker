@@ -111,8 +111,8 @@ function getBatchSizeForModel(model) {
   // Model-specific batch sizes (hardcoded, safe from client manipulation)
   const modelStr = String(model || '').toLowerCase();
 
-  // Gemini 3.0 Flash: Large context window, higher batch size for throughput
-  if (modelStr.includes('gemini-3-flash')) {
+  // Gemini 3.x Flash: Large context window, higher batch size for throughput
+  if (/gemini-3(?:\.[0-9]+)?-.*flash/.test(modelStr)) {
     return 400;
   }
 
@@ -248,6 +248,9 @@ class TranslationEngine {
     this.perBatchRotationEnabled = rotationAvailable && this.keyRotationConfig?.mode === 'per-batch';
     // Retry rotation: enabled for BOTH per-batch and per-request modes so error retries can try a different key
     this.retryRotationEnabled = rotationAvailable;
+    if (this.gemini && this.providerName === 'gemini') {
+      this.gemini.deferRateLimitRetries = this.retryRotationEnabled;
+    }
 
     // Global counter for round-robin key rotation (shared across batches and retries).
     // Seed from the initial key's position so the first rotation advances to the next key
@@ -522,6 +525,7 @@ class TranslationEngine {
       this.keyRotationConfig.advancedSettings
     );
     this.gemini._totalKeys = totalKeys;
+    this.gemini.deferRateLimitRetries = true;
 
     // Restore cached model limits so the new instance doesn't re-fetch them
     if (this._sharedModelLimits) {
@@ -572,9 +576,9 @@ class TranslationEngine {
     if (!error) return false;
     const msg = error.message || '';
     const status = error.statusCode || error.status || error.response?.status || 0;
-    return status === 429 || status === 503 ||
+    return status === 408 || status === 429 || (status >= 500 && status <= 599) ||
       msg.includes('429') || msg.includes('Too Many Requests') ||
-      msg.includes('503') || msg.includes('Service Unavailable') ||
+      msg.includes('503') || msg.includes('Service Unavailable') || msg.includes('DEADLINE_EXCEEDED') ||
       msg.includes('RESOURCE_EXHAUSTED') || msg.includes('rate limit');
   }
 
@@ -1285,7 +1289,7 @@ class TranslationEngine {
         }
       }
 
-      // 429/503: rotate through remaining keys and retry before other error-specific retries
+      // Transient HTTP/API failure: rotate through remaining keys before other retries.
       if (!translatedEntries && this._isRetryableHttpError(error) && this.retryRotationEnabled && maxHttpRotationRetries > 0) {
         // Stats: record initial rate-limit / retryable error
         this.translationStats.rateLimitErrors++;
@@ -1296,8 +1300,8 @@ class TranslationEngine {
         while (!retrySucceeded && !shouldStopHttpRotation && httpRetryAttempts < maxHttpRotationRetries) {
           httpRetryAttempts++;
           this.translationStats.keyRotationRetries++;
-          await this._rotateToNextKey(`429/503 retry ${httpRetryAttempts}/${maxHttpRotationRetries} for batch ${batchIndex + 1}`);
-          log.warn(() => `[TranslationEngine] 429/503 error detected, retrying batch ${batchIndex + 1} with rotated key (${httpRetryAttempts}/${maxHttpRotationRetries})`);
+          await this._rotateToNextKey(`transient API retry ${httpRetryAttempts}/${maxHttpRotationRetries} for batch ${batchIndex + 1}`);
+          log.warn(() => `[TranslationEngine] Transient Gemini error detected, retrying batch ${batchIndex + 1} with rotated key (${httpRetryAttempts}/${maxHttpRotationRetries})`);
 
           try {
             translatedText = await this._translateCall(batchText, targetLanguage, prompt, streamingRequested, streamCallback);

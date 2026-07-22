@@ -7,7 +7,8 @@
         if (!modelSelect || !warningDiv) return;
 
         function updateWarning() {
-            warningDiv.style.display = modelSelect.value === 'gemini-2.5-pro' ? 'block' : 'none';
+            const model = String(modelSelect.value || '');
+            warningDiv.style.display = (model === 'gemini-2.5-pro' || model.includes('-pro-preview')) ? 'block' : 'none';
         }
 
         modelSelect.addEventListener('change', updateWarning);

@@ -1274,6 +1274,9 @@
           "helper": "AI model for translations",
           "options": {
             "gemma27b": "Gemma 27b (beta) (Recommended for Rate Limits)",
+            "flashLite31": "Gemini 3.1 Flash-Lite",
+            "flash35": "Gemini 3.5 Flash",
+            "pro31": "Gemini 3.1 Pro (preview)",
             "flashLite": "Gemini 2.5 Flash-Lite",
             "flash": "Gemini 2.5 Flash",
             "flash3": "Gemini 3.0 Flash (beta)",
@@ -1443,16 +1446,16 @@
         "cacheNoteSuffix": "to ensure your experimental translations don't pollute the shared database.",
         "model": {
           "label": "Translation Model Override",
-          "description": "Override the default model. Leave empty to use system default (gemini-flash-lite-latest).",
+          "description": "Override the default model. Leave empty to use the stable system default (Gemini 3.1 Flash-Lite).",
           "default": "Use Default Model"
         },
         "thinking": {
           "label": "Thinking Budget (Extended Reasoning)",
-          "description": "0 = disabled, -1 = dynamic (auto-adjust), or fixed token count (1-32768). Higher values = deeper reasoning but slower."
+          "description": "Gemini 2.5: 0 disables thinking and -1 is dynamic. Gemini 3.x maps 0, 1-8192 and larger values to low, medium and high thinking."
         },
         "temperature": {
           "label": "Temperature (Creativity)",
-          "description": "Controls randomness (0.0-2.0). Lower = more deterministic, Higher = more creative. Default: 0.8"
+          "description": "Controls randomness (0.0-1.0) for Gemini 2.5. Gemini 3.x uses the model default for reliability."
         },
         "topP": {
           "label": "Top-P (Nucleus Sampling)",
