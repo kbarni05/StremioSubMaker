@@ -231,7 +231,24 @@ docker compose ps
 curl --fail http://localhost:7001/health
 ```
 
-### Automatic updates on Synology
+### Automatic updates with Watchtower
+
+The included Compose service opts in to Watchtower updates with:
+
+```yaml
+labels:
+  - "com.centurylinklabs.watchtower.enable=true"
+```
+
+This also works when Watchtower runs with `--label-enable` or
+`WATCHTOWER_LABEL_ENABLE=true`. Watchtower detects a new
+`ghcr.io/kbarni05/stremiosubmaker:latest` digest, recreates the application
+container, and preserves its environment, network, and persistent volumes.
+No Synology scheduled task is needed when Watchtower already monitors the
+Docker host. `WATCHTOWER_CLEANUP=true` can remove the replaced image after a
+successful update.
+
+### Automatic updates with Synology Task Scheduler
 
 Pushing or merging to this fork's `main` branch automatically publishes a new
 `ghcr.io/kbarni05/stremiosubmaker:latest` image. A running NAS container does
@@ -246,7 +263,8 @@ docker compose up -d --remove-orphans
 docker image prune -f
 ```
 
-Run the task daily or weekly. Keep the Compose file and `.env` together in
+Use this only when Watchtower is not installed. Run the task daily or weekly.
+Keep the Compose file and `.env` together in
 `/volume1/docker/stremio-submaker`. If DSM cannot find `docker` in scheduled
 tasks, run `command -v docker` over SSH and replace `docker` above with that
 absolute path. The `pull_policy: always` setting ensures every recreate checks

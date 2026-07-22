@@ -5,6 +5,9 @@ services:
     image: ghcr.io/kbarni05/stremiosubmaker:latest
     pull_policy: always
     container_name: submaker
+    labels:
+      # Allows Watchtower instances running with --label-enable to update SubMaker.
+      - "com.centurylinklabs.watchtower.enable=true"
     # Give container 30 seconds to gracefully shutdown and save sessions
     stop_grace_period: 30s
     ports:

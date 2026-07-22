@@ -22,6 +22,7 @@
  */
 
 const { version } = require('./version');
+const { createBoundedCache, normalizePositiveInteger } = require('./boundedCache');
 
 // Lazy-load Sentry to avoid crashes if not installed
 let Sentry = null;
@@ -32,8 +33,14 @@ let sentryInitialized = false;
 
 // Deduplication: track how many times we've sent identical events to Sentry.
 // Key = fingerprint string, Value = count sent so far.
-const eventSendCounts = new Map();
 const MAX_IDENTICAL_EVENTS = 5;
+const SENTRY_DEDUP_CACHE_MAX = normalizePositiveInteger(process.env.SENTRY_DEDUP_CACHE_MAX, 5000);
+const SENTRY_DEDUP_WINDOW_MS = 60 * 60 * 1000;
+const eventSendCounts = createBoundedCache({
+    max: SENTRY_DEDUP_CACHE_MAX,
+    ttl: SENTRY_DEDUP_WINDOW_MS,
+    updateAgeOnGet: false
+});
 
 /**
  * Build a deduplication fingerprint for a Sentry event.

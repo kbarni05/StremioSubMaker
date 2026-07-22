@@ -5,6 +5,7 @@ const { StorageUnavailableError } = require('../storage/errors');
 const log = require('./logger');
 const { getTranslator } = require('./i18n');
 const { redactApiKey } = require('./security');
+const { createBoundedCache, normalizePositiveInteger } = require('./boundedCache');
 
 // Language selection limits (configurable via environment)
 const DEFAULT_SOURCE_LANGUAGE_LIMIT = 3;
@@ -1593,8 +1594,17 @@ function buildManifest(config, baseUrl = '') {
   };
 }
 
-// In-memory fallback counters for filesystem mode (keyed by configHash)
-const memoryRotationCounters = new Map();
+// In-memory fallback counters for filesystem mode (keyed by configHash).
+// Bound the cache because config hashes are request-controlled on public add-ons.
+const MEMORY_ROTATION_COUNTER_MAX = normalizePositiveInteger(
+  process.env.MEMORY_ROTATION_COUNTER_MAX,
+  10000
+);
+const memoryRotationCounters = createBoundedCache({
+  max: MEMORY_ROTATION_COUNTER_MAX,
+  ttl: 24 * 60 * 60 * 1000,
+  updateAgeOnGet: true
+});
 
 /**
  * Select a Gemini API key from config using per-user sequential rotation.

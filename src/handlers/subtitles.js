@@ -38,6 +38,7 @@ const { getShared, setShared, incrementCounter, decrementCounter, getCounter, CA
 const { getEffectiveGeminiModel } = require('../utils/config');
 const { applyExplicitFilenameSeasonHint, hasExplicitSeasonEpisodeMismatch, resolveAnimeVideoInfo } = require('../utils/animeSearchResolver');
 const { buildTmdbToImdbWikidataQuery } = require('../utils/tmdbWikidata');
+const { scheduleNonOverlappingInterval } = require('../utils/backgroundInterval');
 
 const fs = require('fs');
 const path = require('path');
@@ -51,12 +52,6 @@ async function getStorageAdapter() {
     storageAdapter = await StorageFactory.getStorageAdapter();
   }
   return storageAdapter;
-}
-
-function scheduleBackgroundInterval(callback, intervalMs) {
-  const timer = setInterval(callback, intervalMs);
-  timer.unref?.();
-  return timer;
 }
 
 // Initialize anime ID mapping services
@@ -1713,18 +1708,20 @@ async function logCacheMetrics() {
     ? ((cacheMetrics.hits / (cacheMetrics.hits + cacheMetrics.misses)) * 100).toFixed(1)
     : 0;
   const cacheSizeGB = (cacheMetrics.totalCacheSize / 1024 / 1024 / 1024).toFixed(2);
+  let storageSessionCount = '?';
 
-  log.debug(() => `[Cache Metrics] Uptime: ${uptime}m | Hits: ${cacheMetrics.hits} | Misses: ${cacheMetrics.misses} | Hit Rate: ${hitRate}% | Disk R/W: ${cacheMetrics.diskReads}/${cacheMetrics.diskWrites} | API Calls: ${cacheMetrics.apiCalls} | Est. Cost Saved: $${cacheMetrics.estimatedCostSaved.toFixed(3)} | Cache Size: ${cacheSizeGB}GB | Evicted: ${cacheMetrics.filesEvicted}`);
-
-  // Also snapshot session namespace so Redis SCAN output includes sessions alongside other caches
+  // Use the maintained O(1) Redis session index for diagnostics. A full SCAN here
+  // made a routine metrics tick compete with real subtitle/session traffic.
   try {
     const adapter = await getStorageAdapter();
-    if (adapter && typeof adapter.list === 'function') {
-      await adapter.list(StorageAdapter.CACHE_TYPES.SESSION, '*');
+    if (adapter && typeof adapter.getSessionCount === 'function') {
+      storageSessionCount = await adapter.getSessionCount();
     }
   } catch (err) {
-    log.warn(() => `[Cache Metrics] Failed to list sessions for diagnostics: ${err?.message || err}`);
+    log.debug(() => `[Cache Metrics] Session count unavailable: ${err?.message || err}`);
   }
+
+  log.debug(() => `[Cache Metrics] Uptime: ${uptime}m | Hits: ${cacheMetrics.hits} | Misses: ${cacheMetrics.misses} | Hit Rate: ${hitRate}% | Disk R/W: ${cacheMetrics.diskReads}/${cacheMetrics.diskWrites} | API Calls: ${cacheMetrics.apiCalls} | Est. Cost Saved: $${cacheMetrics.estimatedCostSaved.toFixed(3)} | Cache Size: ${cacheSizeGB}GB | Evicted: ${cacheMetrics.filesEvicted} | Sessions: ${storageSessionCount}`);
 }
 
 // Initialize cache on module load
@@ -1750,15 +1747,23 @@ if (!cacheMetrics.totalCacheSize) {
 log.debug(() => `[Subtitle Search Cache] Initialized: max=${SUBTITLE_SEARCH_CACHE_MAX} entries, ttl=${Math.floor(SUBTITLE_SEARCH_CACHE_TTL_MS / 1000 / 60)}min, user-scoped=true`);
 
 // Log metrics every 30 minutes
-scheduleBackgroundInterval(logCacheMetrics, 1000 * 60 * 30);
+scheduleNonOverlappingInterval(logCacheMetrics, 1000 * 60 * 30);
 
 // Enforce cache size limit every 10 minutes (async)
-scheduleBackgroundInterval(() => {
-  enforceCacheSizeLimit().catch(err => log.error(() => ['[Cache] Failed in scheduled size enforcement:', err.message]));
+scheduleNonOverlappingInterval(async () => {
+  try {
+    await enforceCacheSizeLimit();
+  } catch (err) {
+    log.error(() => ['[Cache] Failed in scheduled size enforcement:', err.message]);
+  }
 }, 1000 * 60 * 10);
 // Cleanup bypass cache periodically (async)
-scheduleBackgroundInterval(() => {
-  verifyBypassCacheIntegrity().catch(err => log.error(() => ['[Bypass Cache] Scheduled cleanup failed:', err.message]));
+scheduleNonOverlappingInterval(async () => {
+  try {
+    await verifyBypassCacheIntegrity();
+  } catch (err) {
+    log.error(() => ['[Bypass Cache] Scheduled cleanup failed:', err.message]);
+  }
 }, 1000 * 60 * 30);
 
 /**
@@ -5578,46 +5583,40 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
 }
 
 // Clean up expired disk cache entries periodically (only needed for non-permanent caches)
-scheduleBackgroundInterval(() => {
-  (async () => {
-    try {
-      if (!fs.existsSync(CACHE_DIR)) {
-        return;
-      }
-
-      const now = Date.now();
-      const files = await fs.promises.readdir(CACHE_DIR);
-      let removedCount = 0;
-
-      for (const file of files) {
-        if (!file.endsWith('.json')) continue;
-
-        try {
-          const filePath = path.join(CACHE_DIR, file);
-          const content = await fs.promises.readFile(filePath, 'utf8');
-          const cached = JSON.parse(content);
-
-          if (cached.expiresAt && now > cached.expiresAt) {
-            await fs.promises.unlink(filePath);
-            removedCount++;
-          }
-        } catch (_) {
-          // Ignore errors for individual files
-        }
-      }
-
-      if (removedCount > 0) {
-        log.debug(() => `[Cache] Cleaned up ${removedCount} expired disk cache entries`);
-      }
-    } catch (error) {
-      log.error(() => ['[Cache] Failed to clean up disk cache:', error.message]);
+scheduleNonOverlappingInterval(async () => {
+  try {
+    if (!fs.existsSync(CACHE_DIR)) {
+      return;
     }
-  })();
-}, 1000 * 60 * 60); // Every hour (less frequent for disk operations)
 
-scheduleBackgroundInterval(() => {
-  verifyBypassCacheIntegrity().catch(() => { });
-}, 1000 * 60 * 60);
+    const now = Date.now();
+    const files = await fs.promises.readdir(CACHE_DIR);
+    let removedCount = 0;
+
+    for (const file of files) {
+      if (!file.endsWith('.json')) continue;
+
+      try {
+        const filePath = path.join(CACHE_DIR, file);
+        const content = await fs.promises.readFile(filePath, 'utf8');
+        const cached = JSON.parse(content);
+
+        if (cached.expiresAt && now > cached.expiresAt) {
+          await fs.promises.unlink(filePath);
+          removedCount++;
+        }
+      } catch (_) {
+        // Ignore errors for individual files
+      }
+    }
+
+    if (removedCount > 0) {
+      log.debug(() => `[Cache] Cleaned up ${removedCount} expired disk cache entries`);
+    }
+  } catch (error) {
+    log.error(() => ['[Cache] Failed to clean up disk cache:', error.message]);
+  }
+}, 1000 * 60 * 60); // Every hour (less frequent for disk operations)
 
 // Note: No manual cleanup needed for translationStatus - LRU cache handles TTL automatically
 

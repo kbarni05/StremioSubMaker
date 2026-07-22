@@ -25,6 +25,7 @@ const { handleCaughtError } = require('../utils/errorClassifier');
 const { normalizeTargetLanguageForPrompt } = require('./utils/normalizeTargetLanguageForPrompt');
 const { recordKeyError: recordKeyErrorRedis, isKeyCoolingDown: isKeyCoolingDownRedis, getNextRotationIndex, resetKeyHealth } = require('../utils/sharedCache');
 const { executeParallelTranslation } = require('../utils/parallelTranslation');
+const { createBoundedCache, normalizePositiveInteger } = require('../utils/boundedCache');
 
 // Extract normalized tokens from a language label/code (split on common separators)
 function tokenizeLanguageValue(value) {
@@ -139,7 +140,12 @@ function getBatchSizeForModel(model) {
 // Keys with repeated errors are skipped by all engines across ALL PODS,
 // preventing a bad key from being retried by any instance.
 // Local Map is kept as a fast cache layer; Redis is source of truth.
-const _sharedKeyHealthErrors = new Map(); // Local cache: apiKey -> { count: number, lastError: number }
+const KEY_HEALTH_CACHE_MAX = normalizePositiveInteger(process.env.KEY_HEALTH_CACHE_MAX, 10000);
+const _sharedKeyHealthErrors = createBoundedCache({
+  max: KEY_HEALTH_CACHE_MAX,
+  ttl: 60 * 60 * 1000,
+  updateAgeOnGet: false
+}); // Local cache: apiKey -> { count: number, lastError: number }
 
 class TranslationEngine {
   constructor(geminiService, model = null, advancedSettings = {}, options = {}) {
@@ -326,7 +332,7 @@ class TranslationEngine {
   /**
    * Record an error for the current API key (distributed key health tracking).
    * MULTI-INSTANCE FIX: Uses Redis via sharedCache for cross-pod state sharing.
-   * Falls back to local Map if Redis is unavailable.
+   * Falls back to the bounded local LRU cache if Redis is unavailable.
    * @param {string} apiKey - The key that errored
    * @returns {Promise<void>}
    */
@@ -345,6 +351,9 @@ class TranslationEngine {
     }
     entry.count++;
     entry.lastError = now;
+    // Refresh the local TTL from the most recent error, matching the Redis
+    // cooldown window instead of expiring one hour after the first error.
+    this._keyHealthErrors.set(apiKey, entry);
 
     // Also update Redis for cross-pod visibility (fire-and-forget, don't block on it)
     recordKeyErrorRedis(apiKey).catch(err => {
