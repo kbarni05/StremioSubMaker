@@ -21,6 +21,10 @@ const {
   buildStremioNoticeLabel,
   getLocalizedLanguageName,
 } = require('../utils/stremioSubtitleDisplay');
+const {
+  getMobileWaitTimeoutMs,
+  waitForMobileTranslation,
+} = require('../utils/mobileTranslationWait');
 const { deriveVideoHash } = require('../utils/videoHash');
 const { LRUCache } = require('lru-cache');
 const syncCache = require('../utils/syncCache');
@@ -821,6 +825,14 @@ ${t('subtitle.loadingBody', {}, 'Click the same subtitle to reload. Partial resu
   return ensureInformationalSubtitleSize(srt, null, uiLanguage);
 }
 
+function createMobileModeTimeoutSubtitle(uiLanguage = 'en') {
+  const t = getTranslator(uiLanguage);
+  return ensureInformationalSubtitleSize(`1
+00:00:00,000 --> 04:00:00,000
+${t('subtitle.mobileTimeoutTitle', {}, 'MOBILE TRANSLATION STILL RUNNING')}
+${t('subtitle.mobileTimeoutBody', {}, 'The translation continues in the background. Reopen the video or subtitle list, then select the same numbered entry again.')}`, null, uiLanguage);
+}
+
 // Helpers to build partial SRT with an end-of-file warning block
 function srtTimeToMs(t) {
   // t like HH:MM:SS,mmm
@@ -1473,13 +1485,6 @@ async function readFromBypassStorage(cacheKey) {
 // DEPRECATED: Removed - use async readFromBypassStorage() instead
 // This function caused blocking I/O. Legacy code has been migrated.
 
-// Helper: calculate wait timeout for mobile mode (clamp to sensible range)
-function getMobileWaitTimeoutMs(config) {
-  const timeoutSeconds = parseInt(config?.advancedSettings?.translationTimeout) || 720;
-  const clampedSeconds = Math.max(30, Math.min(timeoutSeconds, 300)); // at least 30s, cap at 5m
-  return clampedSeconds * 1000;
-}
-
 // Helper: fetch final translation/error from cache respecting bypass isolation
 async function getFinalCachedTranslation(storageKey, bypassKey, { bypass, bypassEnabled, userHash, allowPermanent, uiLanguage }) {
   const lang = uiLanguage || 'en';
@@ -1516,17 +1521,34 @@ async function getFinalCachedTranslation(storageKey, bypassKey, { bypass, bypass
   return null;
 }
 
-// Helper: wait for final translation to appear in cache (used for mobile mode)
-async function waitForFinalCachedTranslation(storageKey, bypassKey, cacheOptions, timeoutMs) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const result = await getFinalCachedTranslation(storageKey, bypassKey, cacheOptions);
-    if (result) {
-      return result;
-    }
-    await new Promise(res => setTimeout(res, 5000));
+async function waitForMobileTranslationResult({
+  translationPromise = null,
+  storageKey,
+  bypassKey,
+  cacheOptions,
+  timeoutMs,
+  startedAt,
+  uiLanguage = 'en',
+}) {
+  const outcome = await waitForMobileTranslation({
+    translationPromise,
+    readFinal: () => getFinalCachedTranslation(storageKey, bypassKey, cacheOptions),
+    timeoutMs,
+    startedAt,
+  });
+  if (outcome.status === 'completed') {
+    return outcome.content;
   }
-  return null;
+  if (outcome.status === 'failed') {
+    const error = outcome.error || new Error('Translation failed');
+    return createTranslationErrorSubtitle(
+      error.translationErrorType || 'other',
+      error.message || 'Translation failed',
+      uiLanguage,
+      error.serviceName || error.providerName || null
+    );
+  }
+  return createMobileModeTimeoutSubtitle(uiLanguage);
 }
 
 // Save translation to storage (async)
@@ -3283,6 +3305,10 @@ function createSubtitleHandler(config) {
         if (streamFilename) translateQueryParts.push(`filename=${encodeURIComponent(streamFilename)}`);
         if (hasRealStremioHash) translateQueryParts.push(`videoHash=${encodeURIComponent(extra.videoHash)}`);
         if (validVideoSize) translateQueryParts.push(`videoSize=${encodeURIComponent(String(validVideoSize))}`);
+        if (config.mobileMode === true) {
+          translateQueryParts.push('mobile=1');
+          translateQueryParts.push(`mobileRev=${subtitleSearchRevision}`);
+        }
         const translateQuery = translateQueryParts.length ? `?${translateQueryParts.join('&')}` : '';
 
 
@@ -3349,6 +3375,7 @@ function createSubtitleHandler(config) {
               sourceCode: sourceSub.languageCode,
               index: sourceIndex + 1,
               total: sourceSubtitles.length,
+              mobileMode: config.mobileMode === true,
               t,
             });
             // Cache source metadata for later history enrichment (Stremio may drop query params)
@@ -3362,7 +3389,7 @@ function createSubtitleHandler(config) {
             } catch (_) { /* ignore */ }
 
             const translationEntry = {
-              id: `translate_${sourceSub.fileId}_to_${targetLang}`,
+              id: `translate_${config.mobileMode === true ? `m${subtitleSearchRevision}_` : ''}${sourceSub.fileId}_to_${targetLang}`,
               lang: displayName, // Display as "Make Language" in Stremio UI
               url: `{{ADDON_URL}}/translate/${sourceSub.fileId}/${targetLang}${translationUrlExtension}${translateQuery}`
             };
@@ -4578,20 +4605,25 @@ async function handleTranslation(sourceFileId, targetLanguage, config, options =
       log.debug(() => `[Translation] Detected in-flight translation for key=${sharedInFlightKey || runtimeKey}; ${waitForFullTranslation ? 'waiting for completion (mobile mode)' : 'checking for partial results'}`);
       try {
         if (waitForFullTranslation) {
-          const waitedResult = await waitForFinalCachedTranslation(
-            baseKey,
-            cacheKey,
-            { bypass, bypassEnabled, userHash, allowPermanent: allowPermanent && ENABLE_PERMANENT_TRANSLATIONS, uiLanguage: config.uiLanguage || 'en' },
-            mobileWaitTimeoutMs
-          );
-
-          if (waitedResult) {
-            log.debug(() => `[Translation] Mobile mode: returning final result after wait for key=${cacheKey}`);
-            return waitedResult;
-          }
-
-          log.warn(() => `[Translation] Mobile mode wait timed out without final result for key=${cacheKey}`);
-          return createTranslationErrorSubtitle('other', 'Translation did not finish in time. Please retry.', config.uiLanguage || 'en');
+          const activeStatus = translationStatus.get(runtimeKey)
+            || (sharedInFlightKey ? translationStatus.get(sharedInFlightKey) : null);
+          const waitedResult = await waitForMobileTranslationResult({
+            translationPromise: inFlightPromise,
+            storageKey: baseKey,
+            bypassKey: cacheKey,
+            cacheOptions: {
+              bypass,
+              bypassEnabled,
+              userHash,
+              allowPermanent: allowPermanent && ENABLE_PERMANENT_TRANSLATIONS,
+              uiLanguage: config.uiLanguage || 'en'
+            },
+            timeoutMs: mobileWaitTimeoutMs,
+            startedAt: activeStatus?.startedAt,
+            uiLanguage: config.uiLanguage || 'en',
+          });
+          log.debug(() => `[Translation] Mobile mode: shared translation wait completed for key=${cacheKey}`);
+          return waitedResult;
         } else {
           // DON'T WAIT for completion - immediately return available partials instead
           // Check final cache first (bypass/permanent) in case it just completed
@@ -4684,20 +4716,22 @@ async function handleTranslation(sourceFileId, targetLanguage, config, options =
       } else {
         log.debug(() => `[Translation] In-progress existing translation key=${sharedInFlightKey || runtimeKey} (elapsed ${elapsedTime}s); ${waitForFullTranslation ? 'waiting for final result (mobile mode)' : 'attempting partial SRT'}`);
         if (waitForFullTranslation) {
-          const waitedResult = await waitForFinalCachedTranslation(
-            baseKey,
-            cacheKey,
-            { bypass, bypassEnabled, userHash, allowPermanent: allowPermanent && ENABLE_PERMANENT_TRANSLATIONS, uiLanguage: config.uiLanguage || 'en' },
-            mobileWaitTimeoutMs
-          );
-
-          if (waitedResult) {
-            log.debug(() => `[Translation] Mobile mode: returning final result after waiting for status-only path key=${cacheKey}`);
-            return waitedResult;
-          }
-
-          log.warn(() => `[Translation] Mobile mode wait timed out on status-only path for key=${cacheKey}`);
-          return createTranslationErrorSubtitle('other', 'Translation did not finish in time. Please retry.', config.uiLanguage || 'en');
+          const waitedResult = await waitForMobileTranslationResult({
+            storageKey: baseKey,
+            bypassKey: cacheKey,
+            cacheOptions: {
+              bypass,
+              bypassEnabled,
+              userHash,
+              allowPermanent: allowPermanent && ENABLE_PERMANENT_TRANSLATIONS,
+              uiLanguage: config.uiLanguage || 'en'
+            },
+            timeoutMs: mobileWaitTimeoutMs,
+            startedAt: status.startedAt,
+            uiLanguage: config.uiLanguage || 'en',
+          });
+          log.debug(() => `[Translation] Mobile mode: cross-instance translation wait completed for key=${cacheKey}`);
+          return waitedResult;
         } else {
           try {
             const finalNow = await getFinalCachedTranslation(
@@ -4928,20 +4962,23 @@ async function handleTranslation(sourceFileId, targetLanguage, config, options =
 
     // In mobile mode, hold the response until the translation finishes to avoid stale Android caching
     if (waitForFullTranslation) {
-      const waitedResult = await waitForFinalCachedTranslation(
-        baseKey,
-        cacheKey,
-        { bypass, bypassEnabled, userHash, allowPermanent: allowPermanent && ENABLE_PERMANENT_TRANSLATIONS, uiLanguage: config.uiLanguage || 'en' },
-        mobileWaitTimeoutMs
-      );
-
-      if (waitedResult) {
-        log.debug(() => `[Translation] Mobile mode: returning final translation after wait for new request key=${cacheKey}`);
-        return waitedResult;
-      }
-
-      log.warn(() => `[Translation] Mobile mode wait timed out for new translation key=${cacheKey}`);
-      return createTranslationErrorSubtitle('other', 'Translation did not finish in time. Please retry.', config.uiLanguage || 'en');
+      const waitedResult = await waitForMobileTranslationResult({
+        translationPromise,
+        storageKey: baseKey,
+        bypassKey: cacheKey,
+        cacheOptions: {
+          bypass,
+          bypassEnabled,
+          userHash,
+          allowPermanent: allowPermanent && ENABLE_PERMANENT_TRANSLATIONS,
+          uiLanguage: config.uiLanguage || 'en'
+        },
+        timeoutMs: mobileWaitTimeoutMs,
+        startedAt: Date.now(),
+        uiLanguage: config.uiLanguage || 'en',
+      });
+      log.debug(() => `[Translation] Mobile mode: new translation wait completed for key=${cacheKey}`);
+      return waitedResult;
     }
 
     // Return loading message immediately (desktop/standard behavior)
@@ -5462,7 +5499,6 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
           translatedContent,
           translationMeta
         );
-        await bumpSubtitleSearchRevisionForConfigHash(config?.__configHash);
         log.debug(() => `[Translation] Saved xEmbed translation for ${embeddedSource.videoHash}_${embeddedSource.trackId} -> ${canonicalTargetLang}`);
       } catch (e) {
         log.warn(() => [`[Translation] Failed to save xEmbed translation for ${embeddedSource?.videoHash}_${embeddedSource?.trackId}:`, e.message]);
@@ -5521,7 +5557,10 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
 
     // Return translation diagnostics so the .then() handler can pass them to updateHistory
     // Include actual provider and model so updateHistory corrects the initial placeholder values
-    return { translationStats: { ...translationStats, provider: providerName, model: effectiveModel } };
+    return {
+      content: translatedContent,
+      translationStats: { ...translationStats, provider: providerName, model: effectiveModel }
+    };
 
   } catch (error) {
     // Attach accumulated translation diagnostics to the error so the outer .catch() can pass them to history
@@ -5610,6 +5649,11 @@ async function performTranslation(sourceFileId, targetLanguage, config, { cacheK
 
     throw error;
   } finally {
+    // Refresh action URLs after mobile completion/failure so clients that cache a
+    // subtitle URL can fetch a new revision when the stream/list is reopened.
+    if (config?.mobileMode === true || embeddedSource) {
+      await bumpSubtitleSearchRevisionForConfigHash(config?.__configHash);
+    }
     // MULTI-INSTANCE: Decrement per-user concurrency counter in Redis
     // This is critical for preventing concurrency leaks across pods
     try {

@@ -60,8 +60,14 @@
     "config.otherSettings.excludeHearingImpaired.label": "SDH/HI feliratok elrejtése",
     "config.otherSettings.forceSRTOutput.description": "Minden felirat átalakítása SRT formátumra a lehető legjobb lejátszókompatibilitásért.",
     "config.otherSettings.forceSRTOutput.label": "SRT-kimenet kényszerítése",
-    "config.otherSettings.mobileMode.description": "A Stremio mobilon csak egyszer kéri le és gyorsítótárazza a feliratokat, ezért a részleges fordítás nem működik. A Mobil mód megvárja a teljes fordítást, és csak a kész feliratot küldi el. Android/iOS használatakor ajánlott. Nincs részleges fordítás vagy betöltési üzenet, és a lejátszás a fordítás elkészültéig megállhat. A Flash Lite modell ajánlott. Várj 1–3 percet; ha nem töltődik be automatikusan, válts oda-vissza a feliratok között.",
-    "config.otherSettings.mobileMode.label": "Mobil mód (javítás/kerülőmegoldás)",
+    "config.otherSettings.mobileMode.description": "Androidon és iOS-en megvárja a teljes fordítást, és csak ezután válaszol a Stremiónak. Az ismételt kérések ugyanahhoz a fordításhoz csatlakoznak, befejezés után pedig a videó újbóli megnyitásakor friss URL készül.",
+    "config.otherSettings.mobileMode.label": "Mobil mód (teljes felirat)",
+    "config.otherSettings.mobileMode.timeoutLabel": "Leghosszabb várakozás",
+    "config.otherSettings.mobileMode.timeout2m": "2 perc",
+    "config.otherSettings.mobileMode.timeout4m": "4 perc (ajánlott)",
+    "config.otherSettings.mobileMode.timeout6m": "6 perc",
+    "config.otherSettings.mobileMode.timeout10m": "10 perc",
+    "config.otherSettings.mobileMode.timeoutDescription": "A teljes fordítás várakozási idejét korlátozza, az egyes AI-kérések időkorlátjától függetlenül. Hosszabb értékhez olyan fordított proxy szükséges, amely engedi a hosszan futó válaszokat.",
     "config.otherSettings.subToolbox.description": "Megjeleníti a Sub Toolbox bejegyzést a Stremio feliratlistájában, így böngészőből elérhető az összes eszköz.",
     "config.otherSettings.subToolbox.instructionsLink": "Útmutató",
     "config.otherSettings.subToolbox.label": "„Sub Toolbox” engedélyezése (béta)",
@@ -297,9 +303,12 @@
     "subtitleMenu.meta.totalSubtitles": "Feliratok száma",
     "subtitleMenu.meta.languagesAvailable": "Elérhető nyelvek",
     "subtitleMenu.stremio.makeEntry": "▶ Fordítás: {language} · {index}/{total}. forrás · {source}",
+    "subtitleMenu.stremio.mobileEntry": "📱 Mobilfordítás: {language} · {index}/{total}. forrás · {source}",
     "subtitleMenu.stremio.learnEntry": "◇ Tanulás: {language} · {index}/{total}. forrás · {source}",
     "subtitleMenu.stremio.configError": "! SubMaker-hiba",
     "subtitleMenu.stremio.configWarning": "⚠ SubMaker-figyelmeztetés",
-    "subtitleMenu.stremio.toolbox": "🧰 Sub Toolbox"
+    "subtitleMenu.stremio.toolbox": "🧰 Sub Toolbox",
+    "subtitle.mobileTimeoutTitle": "A MOBILFORDÍTÁS MÉG FOLYAMATBAN VAN",
+    "subtitle.mobileTimeoutBody": "A fordítás a háttérben folytatódik. Nyisd meg újra a videót vagy a feliratlistát, majd válaszd ki ugyanazt a sorszámozott bejegyzést."
   }
 }

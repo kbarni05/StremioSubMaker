@@ -6,6 +6,44 @@ All notable changes to this project will be documented in this file.
 
 No changes yet.
 
+## SubMaker v1.5.4
+
+**Mobile Mode:**
+
+- **Reliable complete delivery:** local mobile requests now wait on the actual translation promise and return its completed subtitle directly instead of depending exclusively on five-second storage polling.
+
+- **Shared duplicate requests:** repeated Android/iOS requests join the primary request and receive the same final SRT instead of a plain-text in-progress placeholder that Stremio could cache as the subtitle.
+
+- **Dedicated total wait control:** Mobile Mode has an independent 2, 4, 6, or 10-minute whole-translation limit, with four minutes recommended and configurable through the UI or `MOBILE_MODE_WAIT_TIMEOUT_SECONDS`.
+
+- **Cache-safe retries:** mobile translation IDs and URLs include a search revision. Completion or failure advances that revision so reopening the stream/list can fetch a fresh URL instead of reusing a stale placeholder.
+
+- **Clear player identification:** mobile actions use a localized `📱 Mobile` / `📱 Mobilfordítás` label while retaining source position and language.
+
+**Performance and Reliability:**
+
+- **Faster completion detection:** adaptive sub-second polling grows gradually to three seconds for cross-instance Redis deployments, while same-process results bypass storage polling entirely.
+
+- **Bounded request sharing:** mobile deduplication entries live for the selected wait window plus cleanup grace; unrelated downloads and manifests retain their shorter default lifetime.
+
+- **Storage-failure resilience:** successful AI output can still be delivered to the waiting mobile client even if final cache persistence is delayed or temporarily unavailable.
+
+- **Background-safe timeout:** reaching the mobile response limit produces a localized valid SRT explaining that translation continues, rather than incorrectly marking the AI job as failed.
+
+**UI and Documentation:**
+
+- **Expanded English and Hungarian guidance:** the setting now explains complete delivery, shared jobs, URL refresh behavior, proxy limits, and the separate total wait selector.
+
+- **Updated self-hosting help:** README, troubleshooting, and `.env.example` document the improved workflow and reverse-proxy requirement for long-held responses.
+
+**Bug Fixes:**
+
+- **Fixed false one-minute mobile timeouts:** the total mobile job limit is no longer inherited from a single provider request timeout.
+
+- **Fixed cached in-progress text:** concurrent mobile requests no longer return a non-SRT `Translation already in progress` response.
+
+- **Fixed completed-but-unavailable translations:** a finished translation is returned from memory immediately, even before its Redis/local cache write becomes visible.
+
 ## SubMaker v1.5.3
 
 **Stremio Experience:**

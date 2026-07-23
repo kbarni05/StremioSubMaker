@@ -88,14 +88,20 @@ If 429s persist on a public deployment using VPN/WARP/shared NAT egress, confirm
 
 ### 📱 Subtitles Not Loading on Android
 
-1. **Enable Mobile Mode** — Check "Mobile Mode (fix/workaround)" in Other Settings
-2. **Wait patiently** — Translations take 1-3 minutes in mobile mode
-3. **Switch subtitles** — If stuck, switch to another subtitle and back
-4. **Use Flash-Lite model** — Fastest model for mobile compatibility
+1. **Enable Mobile Mode** — Check “Mobile Mode (complete delivery)” in Other Settings
+2. **Use the four-minute wait first** — Raise it to 6–10 minutes only for slower or local models
+3. **Choose the 📱 translation entry** — Duplicate requests join the same background job
+4. **Reopen after a timeout message** — Completion refreshes the URL revision, so reopening the stream/list can fetch the finished subtitle
+5. **Use Flash-Lite model** — Usually the fastest model for mobile compatibility
+6. **Check your reverse proxy** — Its read/response timeout must be at least as long as the selected Mobile Mode wait
 
 ### ℹ️ Why Mobile Mode Exists
 
-Stremio on Android makes only 1 request for subtitles and caches it. Mobile Mode holds the translation request and delivers the complete subtitle only when ready.
+Stremio on Android may make only one request for a subtitle and retain that result.
+Mobile Mode shares duplicate requests, holds the response for the configured total
+wait, and delivers the completed subtitle directly. If that limit expires, translation
+continues in the background and completion advances the subtitle URL revision for the
+next stream/list opening.
 
 ---
 

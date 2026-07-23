@@ -40,7 +40,11 @@ function collectPublicUiKeys() {
 }
 
 test('Hungarian covers every known main UI and subtitle-menu message without English fallback', () => {
-  const english = JSON.parse(fs.readFileSync(path.join(ROOT, 'locales', 'en.json'), 'utf8')).messages;
+  const englishBase = JSON.parse(fs.readFileSync(path.join(ROOT, 'locales', 'en.json'), 'utf8')).messages;
+  const englishFragment = JSON.parse(
+    fs.readFileSync(path.join(ROOT, 'locales', 'fragments', 'en-ui.json'), 'utf8')
+  ).messages;
+  const english = mergeMessages(englishBase, expandDottedMessages(englishFragment));
   const hungarian = JSON.parse(fs.readFileSync(path.join(ROOT, 'locales', 'hu.json'), 'utf8')).messages;
   const fragment = JSON.parse(
     fs.readFileSync(path.join(ROOT, 'locales', 'fragments', 'hu-ui.json'), 'utf8')

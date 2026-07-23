@@ -759,7 +759,7 @@ async function resolveAutoSubTranslationProvider(config, providerKeyOverride, mo
 // Security: LRU cache for request deduplication to prevent duplicate processing (max 500 entries)
 const inFlightRequests = new LRUCache({
     max: 500, // Max 500 in-flight requests
-    ttl: 180000, // 3 minutes (translations can take a while)
+    ttl: 180000, // 3-minute default; mobile translations override per entry
     updateAgeOnGet: false,
 });
 
@@ -1065,7 +1065,7 @@ if (typeof sessionManager.on === 'function') {
  * @param {Function} fn - Function to execute if not already in flight
  * @returns {Promise} - Promise result
  */
-async function deduplicate(key, fn) {
+async function deduplicate(key, fn, options = {}) {
     // Helper: Create short key hash for logging (first 8 chars of SHA1)
     const shortKey = (() => {
         try {
@@ -1089,7 +1089,9 @@ async function deduplicate(key, fn) {
     log.debug(() => `[Dedup] Starting new operation: ${shortKey}`);
     const promise = fn();
 
-    inFlightRequests.set(key, { promise });
+    const requestedTtl = Number(options.ttl);
+    const ttl = Number.isFinite(requestedTtl) && requestedTtl > 0 ? requestedTtl : undefined;
+    inFlightRequests.set(key, { promise }, ttl ? { ttl } : undefined);
 
     try {
         const result = await promise;
@@ -5189,13 +5191,9 @@ app.get('/addon/:config/translate/:sourceFileId/:targetLang', normalizeSubtitleF
         const isAlreadyInFlight = inFlightRequests.has(dedupKey);
 
         if (isAlreadyInFlight && waitForFullTranslation) {
-            // Don't keep piling up long-held connections in mobile mode; the first request will deliver the final SRT
-            // IMPORTANT: Use 200 (not 202) and NO Retry-After header to prevent Stremio/libmpv from
-            // continuously polling. 202 + Retry-After causes exponential request spam when libmpv
-            // prefetches all translation URLs simultaneously.
-            log.debug(() => `[Translation] Mobile mode duplicate request for ${sourceFileId} to ${targetLang} - returning loading message (primary request in progress)`);
-            setSubtitleCacheHeaders(res, 'loading');
-            return res.send(t('server.errors.translationInProgress', {}, 'Translation already in progress; waiting on primary request.'));
+            // Join the exact same promise below. Returning a placeholder here lets
+            // Android cache that placeholder as the subtitle for the whole stream.
+            log.debug(() => `[Translation] Mobile mode duplicate request for ${sourceFileId} to ${targetLang} - joining primary request`);
         } else if (isAlreadyInFlight) {
             log.debug(() => `[Translation] Duplicate request detected for ${sourceFileId} to ${targetLang} - checking for partial results`);
 
@@ -5291,8 +5289,12 @@ app.get('/addon/:config/translate/:sourceFileId/:targetLang', normalizeSubtitleF
         }
 
         // Deduplicate translation requests - handles the first request
-        const subtitleContent = await deduplicate(dedupKey, () =>
-            handleTranslation(sourceFileId, targetLang, config, {
+        const mobileDedupTtlMs = waitForFullTranslation
+            ? ((Number(config.mobileModeTimeoutSeconds) || 240) * 1000) + 60_000
+            : undefined;
+        const subtitleContent = await deduplicate(
+            dedupKey,
+            () => handleTranslation(sourceFileId, targetLang, config, {
                 waitForFullTranslation,
                 sourceFileId,
                 targetLanguage: targetLang,
@@ -5300,7 +5302,8 @@ app.get('/addon/:config/translate/:sourceFileId/:targetLang', normalizeSubtitleF
                 videoId: req.query.videoId || req.query.id || '',
                 sourceLanguage: req.query.sourceLanguage || req.query.lang || (config.sourceLanguages?.[0] || 'auto'),
                 from: 'addon'
-            })
+            }),
+            { ttl: mobileDedupTtlMs }
         );
 
         // Validate content before processing

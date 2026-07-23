@@ -37,6 +37,19 @@ test('Stremio learning and cached labels stay compact and descriptive', () => {
   assert.equal(buildStremioNoticeLabel('toolbox', getTranslator('hu')), '🧰 Sub Toolbox');
 });
 
+test('Stremio mobile actions are visibly distinct from streaming desktop actions', () => {
+  const label = buildStremioActionLabel({
+    kind: 'translate',
+    language: 'magyar',
+    sourceCode: 'eng',
+    index: 3,
+    total: 12,
+    mobileMode: true,
+    t: getTranslator('hu'),
+  });
+  assert.equal(label, '📱 Mobilfordítás: magyar · 3/12. forrás · ENG');
+});
+
 test('Stremio labels remove control characters and enforce a safe display length', () => {
   const label = sanitizeStremioLabel(`Line one\n${'x'.repeat(120)}`);
   assert.equal(label.includes('\n'), false);

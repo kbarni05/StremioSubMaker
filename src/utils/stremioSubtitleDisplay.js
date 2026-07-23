@@ -46,15 +46,17 @@ function getLocalizedLanguageName(code, uiLanguage = 'en', fallback = '') {
   return sanitizeStremioLabel(fallback || code || tag);
 }
 
-function buildStremioActionLabel({ kind = 'translate', language, sourceCode, index, total, t }) {
+function buildStremioActionLabel({ kind = 'translate', language, sourceCode, index, total, mobileMode = false, t }) {
   const safeLanguage = sanitizeStremioLabel(language || '');
   const safeSource = sanitizeStremioLabel(String(sourceCode || '').toUpperCase(), 16);
   const safeIndex = Math.max(1, Number.parseInt(index, 10) || 1);
   const safeTotal = Math.max(safeIndex, Number.parseInt(total, 10) || safeIndex);
-  const key = kind === 'learn' ? 'subtitleMenu.stremio.learnEntry' : 'subtitleMenu.stremio.makeEntry';
+  const key = kind === 'learn'
+    ? 'subtitleMenu.stremio.learnEntry'
+    : (mobileMode ? 'subtitleMenu.stremio.mobileEntry' : 'subtitleMenu.stremio.makeEntry');
   const fallback = kind === 'learn'
     ? `◇ Learn ${safeLanguage} · ${safeIndex}/${safeTotal} · ${safeSource}`
-    : `▶ Make ${safeLanguage} · ${safeIndex}/${safeTotal} · ${safeSource}`;
+    : `${mobileMode ? '📱' : '▶'} Make ${safeLanguage} · ${safeIndex}/${safeTotal} · ${safeSource}`;
   const translated = typeof t === 'function'
     ? t(key, { language: safeLanguage, source: safeSource, index: safeIndex, total: safeTotal }, fallback)
     : fallback;
