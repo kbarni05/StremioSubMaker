@@ -1,0 +1,24 @@
+{
+  "_comment": "Additional Stremio subtitle display strings introduced in v1.5.3.",
+  "lang": "en",
+  "messages": {
+    "subtitleMenu.chips.source": "Source",
+    "subtitleMenu.chips.target": "Target",
+    "subtitleMenu.chips.cached": "Cached",
+    "subtitleMenu.chips.synced": "Synced",
+    "subtitleMenu.chips.learn": "Learn",
+    "subtitleMenu.chips.tool": "Tool",
+    "subtitleMenu.chips.subtitles": "Subtitles",
+    "subtitleMenu.item.subtitleNumber": "Subtitle {number}",
+    "subtitleMenu.meta.stream": "Stream",
+    "subtitleMenu.meta.hash": "Hash",
+    "subtitleMenu.meta.waitingLinked": "Waiting for linked stream",
+    "subtitleMenu.meta.totalSubtitles": "Total subtitles",
+    "subtitleMenu.meta.languagesAvailable": "Languages available",
+    "subtitleMenu.stremio.makeEntry": "▶ Make {language} · source {index}/{total} · {source}",
+    "subtitleMenu.stremio.learnEntry": "◇ Learn {language} · source {index}/{total} · {source}",
+    "subtitleMenu.stremio.configError": "! SubMaker error",
+    "subtitleMenu.stremio.configWarning": "⚠ SubMaker warning",
+    "subtitleMenu.stremio.toolbox": "🧰 Sub Toolbox"
+  }
+}
