@@ -15,6 +15,12 @@ const SubsRoService = require('../services/subsRo');
 const { parseSRT, toSRT, inspectStremioIdSupport, parseStremioId, appendHiddenInformationalNote, normalizeImdbId, ensureSRTForTranslation, convertToSRT, detectASSFormat } = require('../utils/subtitle');
 const { getLanguageName, getDisplayName, toISO6391, toISO6392, canonicalSyncLanguageCode, normalizeLanguageCode } = require('../utils/languages');
 const { getTranslator } = require('../utils/i18n');
+const {
+  buildCachedSubtitleLabel,
+  buildStremioActionLabel,
+  buildStremioNoticeLabel,
+  getLocalizedLanguageName,
+} = require('../utils/stremioSubtitleDisplay');
 const { deriveVideoHash } = require('../utils/videoHash');
 const { LRUCache } = require('lru-cache');
 const syncCache = require('../utils/syncCache');
@@ -2665,6 +2671,8 @@ function createSubtitleHandler(config) {
         return { subtitles: [] };
       }
 
+      const uiLanguage = config.uiLanguage || 'en';
+      const t = getTranslator(uiLanguage);
       const configuredProviderTimeoutMs = resolveConfiguredSubtitleProviderTimeoutMs(config);
 
       const { type, id, extra } = args;
@@ -2700,7 +2708,7 @@ function createSubtitleHandler(config) {
           subtitles: [{
             id: 'config_error_session_token',
             // Prefix with "!" so Stremio lists this error entry first
-            lang: '!SubMaker Error',
+            lang: buildStremioNoticeLabel('error', t),
             url: `{{ADDON_URL}}/error-subtitle/session-token-not-found.srt`
           }]
         };
@@ -2721,7 +2729,7 @@ function createSubtitleHandler(config) {
         const warningEntry = {
           id: 'config_warning_credential_decryption',
           // Use "⚠" prefix to sort near the top and indicate warning (not error)
-          lang: '⚠ SubMaker Notice',
+          lang: buildStremioNoticeLabel('warning', t),
           url: `{{ADDON_URL}}/error-subtitle/credential-decryption-failed.srt`
         };
 
@@ -2737,7 +2745,7 @@ function createSubtitleHandler(config) {
           subtitles: [{
             id: 'config_error_session_token',
             // Prefix with "!" so Stremio lists this error entry first
-            lang: '!SubMaker Error',
+            lang: buildStremioNoticeLabel('error', t),
             url: `{{ADDON_URL}}/error-subtitle/session-token-not-found.srt`
           }]
         };
@@ -3201,7 +3209,7 @@ function createSubtitleHandler(config) {
         .map(sub => {
           // Display-friendly label for Stremio UI while preserving code for URL
           const displayLang = (sub.languageCode && sub.languageCode.toLowerCase() === 'spn')
-            ? 'Spanish (LA)'
+            ? getLocalizedLanguageName('spn', uiLanguage, 'Spanish (Latin America)')
             : sub.languageCode;
 
           const subtitle = {
@@ -3326,11 +3334,23 @@ function createSubtitleHandler(config) {
         // For each target language, create a translation entry for each source subtitle
         // Translation entries are created from the already-limited source subtitles (16 per source language)
         for (const targetLang of targetLangsForTranslation) {
-          const baseName = getLanguageName(targetLang) || targetLang;
-          const displayName = `Make ${baseName}`;
-          log.debug(() => `[Subtitles] Creating translation entries for ${displayName} (${targetLang})`);
+          const baseName = getLocalizedLanguageName(
+            targetLang,
+            uiLanguage,
+            getLanguageName(targetLang) || targetLang
+          );
+          log.debug(() => `[Subtitles] Creating translation entries for ${baseName} (${targetLang})`);
 
-          for (const sourceSub of sourceSubtitles) {
+          for (let sourceIndex = 0; sourceIndex < sourceSubtitles.length; sourceIndex += 1) {
+            const sourceSub = sourceSubtitles[sourceIndex];
+            const displayName = buildStremioActionLabel({
+              kind: 'translate',
+              language: baseName,
+              sourceCode: sourceSub.languageCode,
+              index: sourceIndex + 1,
+              total: sourceSubtitles.length,
+              t,
+            });
             // Cache source metadata for later history enrichment (Stremio may drop query params)
             try {
               const metaKey = `${config.__configHash || config.userHash || 'default'}:${sourceSub.fileId}`;
@@ -3363,9 +3383,21 @@ function createSubtitleHandler(config) {
           );
 
           for (const learnLang of normalizedLearnLangs) {
-            const baseName = getLanguageName(learnLang);
-            const displayName = `Learn ${baseName}`;
-            for (const sourceSub of sourceSubtitles) {
+            const baseName = getLocalizedLanguageName(
+              learnLang,
+              uiLanguage,
+              getLanguageName(learnLang) || learnLang
+            );
+            for (let sourceIndex = 0; sourceIndex < sourceSubtitles.length; sourceIndex += 1) {
+              const sourceSub = sourceSubtitles[sourceIndex];
+              const displayName = buildStremioActionLabel({
+                kind: 'learn',
+                language: baseName,
+                sourceCode: sourceSub.languageCode,
+                index: sourceIndex + 1,
+                total: sourceSubtitles.length,
+                t,
+              });
               learnEntries.push({
                 id: `learn_${sourceSub.fileId}_to_${learnLang}`,
                 lang: displayName,
@@ -3463,10 +3495,10 @@ function createSubtitleHandler(config) {
           const seenKey = syncedSub.cacheKey || `${entry.hash}_${langCode}`;
           if (seenSync.has(seenKey)) continue;
           seenSync.add(seenKey);
-          const langName = getLanguageName(langCode) || langCode;
+          const langName = getLocalizedLanguageName(langCode, uiLanguage, getLanguageName(langCode) || langCode);
           xSyncEntries.push({
             id: `xsync_${seenKey}`,
-            lang: `xSync ${langName}`,
+            lang: buildCachedSubtitleLabel('xSync', langName),
             url: `{{ADDON_URL}}/xsync/${toPathSegment(entry.hash)}/${toPathSegment(langCode)}/${toPathSegment(syncedSub.sourceSubId)}`
           });
         }
@@ -3542,10 +3574,10 @@ function createSubtitleHandler(config) {
           const seenKey = sub.cacheKey || `${entry.hash}_${langCode}`;
           if (seenAuto.has(seenKey)) continue;
           seenAuto.add(seenKey);
-          const langName = getLanguageName(langCode) || langCode;
+          const langName = getLocalizedLanguageName(langCode, uiLanguage, getLanguageName(langCode) || langCode);
           autoEntries.push({
             id: `auto_${seenKey}`,
-            lang: `Auto ${langName}`,
+            lang: buildCachedSubtitleLabel('Auto', langName),
             url: `{{ADDON_URL}}/auto/${toPathSegment(entry.hash)}/${toPathSegment(langCode)}/${toPathSegment(sub.sourceSubId)}`
           });
         }
@@ -3576,10 +3608,14 @@ function createSubtitleHandler(config) {
               if (seenKeys.has(dedupeKey)) continue;
               seenKeys.add(dedupeKey);
 
-              const langName = getLanguageName(normalizedTarget) || getLanguageName(targetCode) || targetCode;
+              const langName = getLocalizedLanguageName(
+                normalizedTarget,
+                uiLanguage,
+                getLanguageName(normalizedTarget) || getLanguageName(targetCode) || targetCode
+              );
               xEmbedEntries.push({
                 id: `xembed_${entry.cacheKey}`,
-                lang: `xEmbed (${langName})`,
+                lang: buildCachedSubtitleLabel('xEmbed', langName),
                 url: `{{ADDON_URL}}/xembedded/${toPathSegment(hash)}/${toPathSegment(targetCode)}/${toPathSegment(entry.trackId)}`
               });
             }
@@ -3637,10 +3673,14 @@ function createSubtitleHandler(config) {
 
           const smdbSubs = await smdbCache.listSubtitlesMultiHash(smdbHashes);
           for (const sub of smdbSubs) {
-            const langName = getLanguageName(sub.languageCode) || sub.languageCode;
+            const langName = getLocalizedLanguageName(
+              sub.languageCode,
+              uiLanguage,
+              getLanguageName(sub.languageCode) || sub.languageCode
+            );
             smdbEntries.push({
               id: `smdb_${sub.videoHash}_${sub.languageCode}`,
-              lang: `SMDB (${langName})`,
+              lang: buildCachedSubtitleLabel('SMDB', langName),
               url: `{{ADDON_URL}}/smdb/${toPathSegment(sub.videoHash)}/${toPathSegment(sub.languageCode)}.srt`
             });
           }
@@ -3686,12 +3726,11 @@ function createSubtitleHandler(config) {
       }
 
       // Add unified Sub Toolbox action button
-      const t = getTranslator(config.uiLanguage || 'en');
       let actionButtons = [];
       if (toolboxEnabled) {
         const toolboxEntry = {
           id: 'sub_toolbox',
-          lang: t('subtitle.subToolboxLabel', {}, 'Sub Toolbox'),
+          lang: buildStremioNoticeLabel('toolbox', t),
           url: `{{ADDON_URL}}/sub-toolbox/${id}?filename=${encodeURIComponent(streamFilename || '')}`
         };
         actionButtons.push(toolboxEntry);

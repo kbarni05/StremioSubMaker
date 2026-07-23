@@ -23,6 +23,26 @@ function mergeMessages(base, override) {
   return result;
 }
 
+function expandDottedMessages(input) {
+  const expanded = {};
+  if (!isPlainObject(input)) return expanded;
+
+  Object.entries(input).forEach(([key, value]) => {
+    const parts = String(key).split('.').filter(Boolean);
+    if (parts.length === 0) return;
+    let current = expanded;
+    parts.forEach((part, index) => {
+      if (index === parts.length - 1) {
+        current[part] = value;
+      } else {
+        if (!isPlainObject(current[part])) current[part] = {};
+        current = current[part];
+      }
+    });
+  });
+  return expanded;
+}
+
 function deepFreeze(obj) {
   if (!obj || typeof obj !== 'object') return obj;
   Object.getOwnPropertyNames(obj).forEach((key) => {
@@ -63,6 +83,16 @@ function loadLocale(lang) {
       return null;
     }
   };
+  const readFragment = (code) => {
+    const filePath = path.join(localesDir, 'fragments', `${code}-ui.json`);
+    try {
+      const raw = fs.readFileSync(filePath, 'utf8');
+      const fragment = JSON.parse(raw);
+      return expandDottedMessages(fragment.messages || fragment);
+    } catch (_) {
+      return {};
+    }
+  };
 
   const baseLang = safeLang.split('-')[0];
   const english = readLocale(DEFAULT_LANG) || {};
@@ -71,9 +101,14 @@ function loadLocale(lang) {
     (baseLang !== safeLang ? readLocale(baseLang) : null) ||
     (safeLang === 'pt-pt' ? readLocale('pt-br') : null) ||
     english;
+  const fragment = mergeMessages(
+    baseLang !== safeLang ? readFragment(baseLang) : {},
+    readFragment(safeLang)
+  );
+  const localizedMessages = mergeMessages(localized.messages || {}, fragment);
   const messages = safeLang === DEFAULT_LANG
-    ? (english.messages || {})
-    : mergeMessages(english.messages || {}, localized.messages || {});
+    ? mergeMessages(english.messages || {}, fragment)
+    : mergeMessages(english.messages || {}, localizedMessages);
   const payload = { lang: localized.lang || safeLang, messages };
 
   // Freeze to prevent accidental cross-request mutation of cached locale objects
@@ -180,5 +215,6 @@ module.exports = {
   getTranslator,
   buildClientBootstrap,
   mergeMessages,
+  expandDottedMessages,
   DEFAULT_LANG,
 };

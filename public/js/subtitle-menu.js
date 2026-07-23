@@ -1322,12 +1322,12 @@
   function subtitleChipForType(type, item) {
     if (item?.isTranslation) return { label: tMenu('actions.translate', {}, 'Translate'), cls: 'target' };
     switch (type) {
-      case 'target': return { label: 'Target', cls: 'target' };
+      case 'target': return { label: tMenu('chips.target', {}, 'Target'), cls: 'target' };
       case 'cached': return { label: 'xEmbed', cls: 'cached' };
-      case 'learn': return { label: 'Learn', cls: 'learn' };
+      case 'learn': return { label: tMenu('chips.learn', {}, 'Learn'), cls: 'learn' };
       case 'synced': return { label: 'xSync', cls: 'synced' };
-      case 'action': return { label: 'Tool', cls: 'cached' };
-      default: return { label: 'Source', cls: 'source' };
+      case 'action': return { label: tMenu('chips.tool', {}, 'Tool'), cls: 'cached' };
+      default: return { label: tMenu('chips.source', {}, 'Source'), cls: 'source' };
     }
   }
 
@@ -1739,10 +1739,12 @@
     function getBaseStatusMessage() {
       const parts = [];
       const streamLabel = normalizeStreamValue(config.filename) || normalizeStreamValue(config.videoId);
-      parts.push(streamLabel ? ('Stream: ' + streamLabel) : 'Waiting for linked stream');
+      parts.push(streamLabel
+        ? `${tMenu('meta.stream', {}, 'Stream')}: ${streamLabel}`
+        : tMenu('meta.waitingLinked', {}, 'Waiting for linked stream'));
       const hash = (typeof config.getVideoHash === 'function' ? config.getVideoHash() : config.videoHash) || '';
-      if (hash) parts.push('Hash ' + hash);
-      return parts.join(' | ') || 'Waiting for linked stream';
+      if (hash) parts.push(`${tMenu('meta.hash', {}, 'Hash')} ${hash}`);
+      return parts.join(' | ') || tMenu('meta.waitingLinked', {}, 'Waiting for linked stream');
     }
 
     function setSubtitleMenuStatus(els, message, variant = 'muted', options = {}) {
@@ -1890,7 +1892,13 @@
 
       // Build styled pill tags instead of plain text
       const tagOrder = ['source', 'target', 'cached', 'synced', 'learn'];
-      const tagLabels = { source: 'Source', target: 'Target', cached: 'xEmbed', synced: 'xSync', learn: 'Learn' };
+      const tagLabels = {
+        source: tMenu('chips.source', {}, 'Source'),
+        target: tMenu('chips.target', {}, 'Target'),
+        cached: 'xEmbed',
+        synced: 'xSync',
+        learn: tMenu('chips.learn', {}, 'Learn')
+      };
       let hasTags = false;
       tagOrder.forEach(type => {
         if (counts[type]) {
@@ -1904,7 +1912,7 @@
       if (!hasTags) {
         const defaultTag = document.createElement('span');
         defaultTag.className = 'subtitle-lang-pill-tag';
-        defaultTag.textContent = 'Subtitles';
+        defaultTag.textContent = tMenu('chips.subtitles', {}, 'Subtitles');
         pill.appendChild(defaultTag);
       }
       meta.appendChild(title);
@@ -1937,7 +1945,9 @@
       sortedItems.forEach((item, idx) => {
         const isSourceType = item.type === 'source';
         const displayItem = (groupType === 'primary' && isSourceType)
-          ? Object.assign({}, item, { label: `${languageCodeLabel} - Subtitle ${sourceCounter + 1}` })
+          ? Object.assign({}, item, {
+            label: `${languageCodeLabel} - ${tMenu('item.subtitleNumber', { number: sourceCounter + 1 }, `Subtitle ${sourceCounter + 1}`)}`
+          })
           : item;
         if (isSourceType) sourceCounter += 1;
         menu.appendChild(buildSubtitleMenuItem(displayItem, idx));
@@ -2028,11 +2038,11 @@
         const totalLangs = new Set(filtered.map(i => i.languageKey)).size;
 
         els.footerStats.innerHTML = `
-          <div class="subtitle-menu-stat" title="Total subtitles">
+          <div class="subtitle-menu-stat" title="${escapeHtml(tMenu('meta.totalSubtitles', {}, 'Total subtitles'))}">
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
             ${totalSubs}
           </div>
-          <div class="subtitle-menu-stat" title="Languages available">
+          <div class="subtitle-menu-stat" title="${escapeHtml(tMenu('meta.languagesAvailable', {}, 'Languages available'))}">
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
             ${totalLangs}
           </div>

@@ -6,6 +6,36 @@ All notable changes to this project will be documented in this file.
 
 No changes yet.
 
+## SubMaker v1.5.3
+
+**Stremio Experience:**
+
+- **Identifiable translation sources:** every translation and Learn Mode entry in Stremio now includes its source position and language, such as `Make Hungarian · source 2/16 · ENG`, so similarly named entries are no longer guesswork.
+
+- **Localized player-facing labels:** action, cache, toolbox, warning, and error entries use the configured interface language, with safe Unicode labels and consistent `xSync ✓`, `Auto ✓`, `xEmbed ✓`, and `SMDB ✓` markers.
+
+- **Native subtitle behavior preserved:** normal provider subtitles continue to use valid language codes for Stremio's built-in language handling, while only interactive action entries use descriptive labels.
+
+**Hungarian Interface:**
+
+- **Completed the main UI translation:** 243 previously English-fallback Configure, provider, validation, advanced AI, toolbox, and subtitle-menu strings now have reviewed Hungarian text.
+
+- **Fully localized subtitle panel:** stream state, groups, actions, chips, counters, metadata, tooltips, and error states are now translated instead of mixing Hungarian and English.
+
+- **Translation coverage guard:** an automated test scans the public UI and fails when a known main-interface or subtitle-menu key is missing from Hungarian.
+
+**Reliability and Maintenance:**
+
+- **Safe locale fragments:** focused translation additions are expanded and deeply merged with the base locale while retaining immutable cached locale payloads and English fallback for non-UI diagnostics.
+
+- **Display regression tests:** new tests cover localized Stremio actions, regional language names, cached-entry markers, notice labels, control-character removal, and bounded label length.
+
+**Bug Fixes:**
+
+- **Fixed indistinguishable Stremio actions:** translation entries no longer share the same player-visible name when several source subtitles are available.
+
+- **Fixed mixed-language Hungarian menus:** advanced provider controls, validation messages, subtitle-panel metadata, and toolbox states no longer fall back to English in the main UI.
+
 ## SubMaker v1.5.2
 
 **New Features:**
