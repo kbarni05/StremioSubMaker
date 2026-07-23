@@ -1291,6 +1291,7 @@ Translate to {target_language}.`;
             convertAssToVtt: true, // If true, convert ASS/SSA subtitles to VTT (default: enabled for backwards compatibility)
             androidSubtitleCompatMode: 'off', // Dev mode only: 'off' | 'safe' | 'aggressive'
             mobileMode: false, // Opt-in: wait for full translation before responding (no automatic device detection)
+            mobileModeTimeoutSeconds: 240,
             singleBatchMode: false, // Try translating whole file at once
             advancedSettings: {
                 enabled: false, // Auto-set to true if any setting differs from defaults (forces bypass cache)
@@ -3724,6 +3725,7 @@ Translate to {target_language}.`;
         currentConfig.learnTargetLanguages = normalizeLanguageCodes(currentConfig.learnTargetLanguages || []);
         currentConfig.learnPlacement = 'top';
         currentConfig.mobileMode = currentConfig.mobileMode === true;
+        currentConfig.mobileModeTimeoutSeconds = Math.max(60, Math.min(600, parseInt(currentConfig.mobileModeTimeoutSeconds, 10) || 240));
         currentConfig.excludeHearingImpairedSubtitles = currentConfig.excludeHearingImpairedSubtitles === true;
         enforceLanguageLimits();
         updateLanguageLimitCopy();
@@ -5681,6 +5683,7 @@ Translate to {target_language}.`;
         currentConfig.learnTargetLanguages = normalizeLanguageCodes(currentConfig.learnTargetLanguages || []);
         currentConfig.learnPlacement = 'top';
         currentConfig.mobileMode = currentConfig.mobileMode === true;
+        currentConfig.mobileModeTimeoutSeconds = Math.max(60, Math.min(600, parseInt(currentConfig.mobileModeTimeoutSeconds, 10) || 240));
         currentConfig.excludeHearingImpairedSubtitles = currentConfig.excludeHearingImpairedSubtitles === true;
         enforceLanguageLimits();
         updateLanguageLimitCopy();
@@ -10310,6 +10313,7 @@ Translate to {target_language}.`;
             newConfig.bypassCache = oldConfig.bypassCache === true;
             // - mobile mode
             newConfig.mobileMode = oldConfig.mobileMode === true;
+            newConfig.mobileModeTimeoutSeconds = Math.max(60, Math.min(600, parseInt(oldConfig.mobileModeTimeoutSeconds, 10) || 240));
             // - single-batch mode
             newConfig.singleBatchMode = oldConfig.singleBatchMode === true;
             // - exclude HI/SDH subtitles
@@ -10626,6 +10630,10 @@ Translate to {target_language}.`;
         if (hiExcludeElNoTranslation) hiExcludeElNoTranslation.checked = hiExcludeEnabled;
         const mobileModeEl = document.getElementById('mobileMode');
         if (mobileModeEl) mobileModeEl.checked = currentConfig.mobileMode === true;
+        const mobileModeTimeoutEl = document.getElementById('mobileModeTimeoutSeconds');
+        if (mobileModeTimeoutEl) mobileModeTimeoutEl.value = String(currentConfig.mobileModeTimeoutSeconds || 240);
+        const mobileModeOptionsEl = document.getElementById('mobileModeOptions');
+        if (mobileModeOptionsEl) mobileModeOptionsEl.style.display = currentConfig.mobileMode === true ? '' : 'none';
         const singleBatchEl = document.getElementById('singleBatchMode');
         if (singleBatchEl) singleBatchEl.checked = currentConfig.singleBatchMode === true;
         const forceSRTEl = document.getElementById('forceSRTOutput');
@@ -10785,15 +10793,28 @@ Translate to {target_language}.`;
 
         // Track mobile mode toggle in state
         const mobileToggle = document.getElementById('mobileMode');
+        const mobileTimeout = document.getElementById('mobileModeTimeoutSeconds');
+        const mobileOptions = document.getElementById('mobileModeOptions');
+        const syncMobileOptions = () => {
+            if (mobileOptions) mobileOptions.style.display = currentConfig.mobileMode === true ? '' : 'none';
+        };
         if (mobileToggle) {
             mobileToggle.checked = currentConfig.mobileMode === true;
             mobileToggle.onchange = (e) => {
                 currentConfig.mobileMode = e.target.checked;
+                syncMobileOptions();
             };
         } else {
             // If the toggle isn't present, preserve existing value in state
             currentConfig.mobileMode = currentConfig.mobileMode === true;
         }
+        if (mobileTimeout) {
+            mobileTimeout.value = String(currentConfig.mobileModeTimeoutSeconds || 240);
+            mobileTimeout.onchange = (e) => {
+                currentConfig.mobileModeTimeoutSeconds = Math.max(60, Math.min(600, parseInt(e.target.value, 10) || 240));
+            };
+        }
+        syncMobileOptions();
 
         // Track HI/SDH exclusion toggles (keep both in sync)
         const hiExcludeToggle = document.getElementById('excludeHearingImpairedSubtitles');
@@ -11086,6 +11107,10 @@ Translate to {target_language}.`;
                 const el = document.getElementById('mobileMode');
                 if (el) return el.checked;
                 return currentConfig?.mobileMode === true;
+            })(),
+            mobileModeTimeoutSeconds: (function () {
+                const el = document.getElementById('mobileModeTimeoutSeconds');
+                return Math.max(60, Math.min(600, parseInt(el?.value || currentConfig?.mobileModeTimeoutSeconds, 10) || 240));
             })(),
             singleBatchMode: singleBatchEnabled,
             parallelBatchesEnabled: (function () { const el = document.getElementById('parallelBatchesEnabled'); return el ? el.checked === true : false; })(),

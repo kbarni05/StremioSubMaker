@@ -1911,19 +1911,27 @@
                             <label>
                                 <input type="checkbox" id="mobileMode">
                                 <span data-i18n="config.otherSettings.mobileMode.label">Mobile Mode
-                                    (fix/workaround)</span>
+                                    (complete delivery)</span>
                                 <span class="label-description"
-                                    data-i18n="config.otherSettings.mobileMode.description">Stremio makes only 1 request
-                                    for subtitles and caches it, so
-                                    subtitles in Android can't be partially delivered. Mobile Mode holds translation
-                                    requests
-                                    and sends the final subtitle only when ready. Use this if you're watching on
-                                    Android/iOS. No
-                                    partial translations, no loading messages. Might freeze the stream until translation
-                                    is
-                                    ready. Flash-lite recommended. Wait 1-3 min, if it doesn't load automatically switch
-                                    subtitles back and forth to load the translation.</span>
+                                    data-i18n="config.otherSettings.mobileMode.description">Waits for the complete
+                                    translation before responding to Stremio on Android/iOS. Duplicate requests share
+                                    the same job, and reopening the stream receives a fresh URL after completion.</span>
                             </label>
+                            <div id="mobileModeOptions" class="nested-settings"
+                                style="display: none; margin-top: 0.75rem;">
+                                <label for="mobileModeTimeoutSeconds"
+                                    data-i18n="config.otherSettings.mobileMode.timeoutLabel">Maximum wait</label>
+                                <select id="mobileModeTimeoutSeconds">
+                                    <option value="120" data-i18n="config.otherSettings.mobileMode.timeout2m">2 minutes</option>
+                                    <option value="240" data-i18n="config.otherSettings.mobileMode.timeout4m">4 minutes (recommended)</option>
+                                    <option value="360" data-i18n="config.otherSettings.mobileMode.timeout6m">6 minutes</option>
+                                    <option value="600" data-i18n="config.otherSettings.mobileMode.timeout10m">10 minutes</option>
+                                </select>
+                                <span class="label-description"
+                                    data-i18n="config.otherSettings.mobileMode.timeoutDescription">This limits the whole
+                                    translation wait, independently from an individual AI request timeout. Long waits
+                                    require a reverse proxy that permits long-running responses.</span>
+                            </div>
                         </div>
 
                         <div class="form-group">

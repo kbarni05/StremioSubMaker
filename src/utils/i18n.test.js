@@ -23,6 +23,12 @@ test('Hungarian translations preserve interpolation variables', () => {
   assert.equal(t('config.quickSetup.stepOf', { current: 2, total: 7 }), '2. lépés / 7');
 });
 
+test('mobile mode guidance and timeout subtitles are available in Hungarian', () => {
+  const t = getTranslator('hu');
+  assert.equal(t('config.otherSettings.mobileMode.timeout4m'), '4 perc (ajánlott)');
+  assert.equal(t('subtitle.mobileTimeoutTitle'), 'A MOBILFORDÍTÁS MÉG FOLYAMATBAN VAN');
+});
+
 test('message merging does not mutate either input', () => {
   const base = { section: { title: 'English', description: 'Fallback' } };
   const override = { section: { title: 'Magyar' } };

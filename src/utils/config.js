@@ -6,6 +6,7 @@ const log = require('./logger');
 const { getTranslator } = require('./i18n');
 const { redactApiKey } = require('./security');
 const { createBoundedCache, normalizePositiveInteger } = require('./boundedCache');
+const { clampMobileWaitSeconds, DEFAULT_MOBILE_WAIT_SECONDS } = require('./mobileTranslationWait');
 
 // Language selection limits (configurable via environment)
 const DEFAULT_SOURCE_LANGUAGE_LIMIT = 3;
@@ -872,6 +873,10 @@ function normalizeConfig(config) {
 
   // Normalize mobile mode flag
   mergedConfig.mobileMode = mergedConfig.mobileMode === true;
+  mergedConfig.mobileModeTimeoutSeconds = clampMobileWaitSeconds(
+    mergedConfig.mobileModeTimeoutSeconds,
+    process.env.MOBILE_MODE_WAIT_TIMEOUT_SECONDS || DEFAULT_MOBILE_WAIT_SECONDS
+  );
 
   // Show all Gemini API configs that will be used (throttled to avoid spam on polling endpoints)
   logGeminiConfigThrottled(mergedConfig);
@@ -1318,6 +1323,10 @@ function getDefaultConfig(modelName = null) {
     // Android subtitle compatibility mode (dev mode only): 'off' (default), 'safe', 'aggressive'
     androidSubtitleCompatMode: 'off',
     mobileMode: false, // Hold translation responses until full translation is ready (opt-in only, no automatic device detection)
+    mobileModeTimeoutSeconds: clampMobileWaitSeconds(
+      process.env.MOBILE_MODE_WAIT_TIMEOUT_SECONDS,
+      DEFAULT_MOBILE_WAIT_SECONDS
+    ),
     singleBatchMode: false, // Translate whole file at once (streaming partials)
     // Minimum size for a subtitle file to be considered valid (bytes)
     // Prevents attempting to load/translate obviously broken files

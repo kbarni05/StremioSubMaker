@@ -187,7 +187,7 @@ interactive translation, Learn Mode, cache, and toolbox entries.
 | Translation Workflow | "XML Tags" for best sync |
 | Database Mode | "Use SubMaker Database" for shared caching |
 | Provider Timeout | 12s default, increase to 30s for SCS/Wyzie |
-| Mobile Mode | Enable for Android/iOS |
+| Mobile Mode | Complete Android/iOS delivery with a configurable 2–10 minute wait |
 
 ### Advanced Mode
 
@@ -231,9 +231,16 @@ Test other **Translation Workflow** in Settings:
 
 ### 📱 Android / Mobile Issues?
 
-1. **Enable Mobile Mode** — Check "Mobile Mode" in Other Settings
-2. **Wait 1-3 minutes** — Mobile delivers complete subtitle when ready
-3. **Use Flash-Lite** — Fastest model for mobile
+1. **Enable Mobile Mode** — Check “Mobile Mode (complete delivery)” in Other Settings
+2. **Choose the maximum wait** — Four minutes is recommended; slower/local models can use 6–10 minutes
+3. **Select the 📱 entry** — Repeated requests share one translation and return only the complete subtitle
+4. **If the limit is reached** — Translation continues; reopen the video/list and select the same numbered entry
+5. **Use Flash-Lite** — Usually the fastest option for mobile
+
+Mobile Mode’s total wait is separate from an individual AI request timeout. Self-hosted
+reverse proxies must allow a response to remain open for the selected duration. The
+server refreshes the mobile subtitle URL after completion/failure so reopening the
+stream does not reuse an older Stremio-cached response.
 
 ### 💾 Configuration Not Saving?
 
