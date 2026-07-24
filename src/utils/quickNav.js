@@ -243,13 +243,18 @@ function quickNavStyles() {
     @media (max-width: 1280px) {
       .quick-nav {
         width: min(1040px, calc(100% - 44px));
-        padding: 0.45rem 0.6rem;
-        gap: 0.4rem;
-        font-size: 0.8rem;
+        padding: 0.42rem 0.5rem;
+        gap: 0.25rem;
+        font-size: 0.76rem;
       }
-      .quick-nav-links { gap: 0.35rem; }
-      .quick-nav-link { padding: 0.37rem 0.58rem; }
-      .quick-nav-link .pill { font-size: 0.65rem; }
+      .quick-nav-links {
+        gap: 0.22rem;
+        justify-content: center;
+        flex: 1;
+        min-width: 0;
+      }
+      .quick-nav-link { padding: 0.33rem 0.38rem; gap: 0.28rem; }
+      .quick-nav-link .pill { display: none; }
       .quick-nav-link.quick-nav-refresh { width: 37px; height: 37px; }
     }
 
@@ -369,6 +374,11 @@ function renderQuickNav(links, activeKey, showRefreshButton = true, devMode = tr
         <span>📜</span>
         <span>${label('history', 'History')}</span>
         ${activeKey === 'history' ? `<span class="pill">${label('youAreHere', 'You are here')}</span>` : ''}
+      </a>
+      <a class="quick-nav-link${activeKey === 'statistics' ? ' active' : ''}" href="${links.statistics}">
+        <span>📊</span>
+        <span>${label('statistics', 'Statistics')}</span>
+        ${activeKey === 'statistics' ? `<span class="pill">${label('youAreHere', 'You are here')}</span>` : ''}
       </a>
       <a class="quick-nav-link${activeKey === 'configure' ? ' active' : ''}" href="${links.configure}">
         <span>🛠️</span>

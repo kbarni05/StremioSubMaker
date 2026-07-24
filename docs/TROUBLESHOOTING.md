@@ -156,6 +156,20 @@ next stream/list opening.
 - **Draft unexpectedly returns** — Use **Clear** to remove both the editor content
   and its browser-local recovery draft.
 
+### 📊 Statistics Page Does Not Update
+
+- **Open it from a saved profile** — Statistics and Translation History require a
+  valid saved configuration token. Save the configuration before using either main
+  page shortcut.
+- **Last snapshot remains visible** — This is intentional during a temporary
+  backend or Redis failure. The status changes from **Live** to a stale-data warning;
+  use **Refresh now** after storage recovers.
+- **High event-loop or memory warning** — Check concurrent translations, container
+  memory limits, Redis health, and pending HTTP requests shown on the same page.
+- **Hardware values look like the host** — Depending on the Docker/runtime version,
+  Node.js may report host-level CPU or memory information. Treat these values as
+  diagnostic context rather than a container quota guarantee.
+
 ---
 
 ## Docker / Self-Hosting Issues

@@ -6231,6 +6231,26 @@ Translate to {target_language}.`;
         return `/sub-toolbox?config=${encodeURIComponent(cfg)}&videoId=${encodeURIComponent(fallbackVideoId)}&filename=${encodeURIComponent(fallbackFilename)}`;
     }
 
+    function buildActivityUrl(pathname, configRef) {
+        const cfg = configRef && isValidConfigToken(configRef) ? configRef : getActiveConfigRef();
+        if (!cfg) return '';
+        return `${pathname}?config=${encodeURIComponent(cfg)}&videoId=${encodeURIComponent('Stream and Refresh')}&filename=${encodeURIComponent('Stream and Refresh')}`;
+    }
+
+    function updateActivityQuickLinks(configRef, tokenDisabled = false) {
+        const nav = document.getElementById('activityQuickLinks');
+        const historyLink = document.getElementById('translationHistoryLauncher');
+        const statisticsLink = document.getElementById('statisticsLauncher');
+        if (!nav) return;
+
+        const cfg = configRef && isValidConfigToken(configRef) ? configRef : '';
+        const visible = !!cfg && tokenDisabled !== true;
+        nav.style.display = visible ? '' : 'none';
+        nav.setAttribute('aria-hidden', visible ? 'false' : 'true');
+        if (historyLink) historyLink.href = visible ? buildActivityUrl('/sub-history', cfg) : '#';
+        if (statisticsLink) statisticsLink.href = visible ? buildActivityUrl('/statistics', cfg) : '#';
+    }
+
     function getCachedConfigForToken(tokenToCheck) {
         if (!tokenToCheck) return null;
         try {
@@ -6253,6 +6273,7 @@ Translate to {target_language}.`;
         try {
             cachedToken = localStorage.getItem(CACHE_TOKEN_KEY) || '';
         } catch (_) { }
+        updateActivityQuickLinks(cfgRef, tokenDisabled);
         const launcherState = resolveToolboxLauncherState({
             tokenToCheck: cfgRef,
             activeToken: getActiveConfigRef(),
