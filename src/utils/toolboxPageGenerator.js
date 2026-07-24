@@ -9,6 +9,7 @@ const { quickNavStyles, quickNavScript, renderQuickNav, renderRefreshBadge } = r
 const { buildClientBootstrap, loadLocale, getTranslator } = require('./i18n');
 const { resolveHistoryTitle } = require('../handlers/subtitles');
 const { getEffectiveGeminiModel } = require('./config');
+const { getLocalizedLanguageName } = require('./stremioSubtitleDisplay');
 
 function escapeHtml(value) {
   if (value === undefined || value === null) return '';
@@ -402,11 +403,12 @@ function formatProviderName(name) {
     .join(' ');
 }
 
-function getLanguageSummary(config, translator) {
+function getLanguageSummary(config, translator, uiLanguage = 'en') {
   try {
     const fallback = translator ? translator('toolbox.summary.notSet', {}, 'Not set yet') : 'Not set yet';
-    const sources = (config.sourceLanguages || []).map(getLanguageName).filter(Boolean);
-    const targets = (config.targetLanguages || []).map(getLanguageName).filter(Boolean);
+    const localize = code => getLocalizedLanguageName(code, uiLanguage, getLanguageName(code) || code);
+    const sources = (config.sourceLanguages || []).map(localize).filter(Boolean);
+    const targets = (config.targetLanguages || []).map(localize).filter(Boolean);
     return {
       sources: sources.length ? sources.join(', ') : fallback,
       targets: targets.length ? targets.join(', ') : fallback
@@ -455,7 +457,7 @@ function generateSubToolboxPage(configStr, videoId, filename, config) {
   const links = buildToolLinks(configStr, videoId, filename);
   const t = getTranslator(config?.uiLanguage || 'en');
   const themeToggleLabel = t('fileUpload.themeToggle', {}, 'Toggle theme');
-  const languageSummary = getLanguageSummary(config || {}, t);
+  const languageSummary = getLanguageSummary(config || {}, t, config?.uiLanguage || 'en');
   const providerSummary = getProviderSummary(config || {}, t);
   const streamHint = filename ? escapeHtml(filename) : t('toolbox.streamUnknown', {}, 'Stream filename not detected (still works)');
   const videoHash = deriveVideoHash(filename, videoId);
@@ -573,6 +575,7 @@ function generateSubToolboxPage(configStr, videoId, filename, config) {
       justify-content: space-between;
       gap: 12px;
       flex-wrap: wrap;
+      padding-right: 68px;
     }
     .brand {
       display: flex;
@@ -1143,6 +1146,243 @@ function generateSubToolboxPage(configStr, videoId, filename, config) {
     .tool-tile.dev-disabled:hover::before {
       opacity: 0;
     }
+    .subtitle-studio {
+      margin-top: 22px;
+      padding: 22px;
+      background: linear-gradient(145deg, rgba(8, 164, 213, 0.08), rgba(51, 185, 225, 0.03)), var(--surface);
+      border: 1px solid rgba(8, 164, 213, 0.3);
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+      scroll-margin-top: 24px;
+    }
+    .studio-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+    .studio-header h2 {
+      margin: 4px 0 6px;
+      font-family: 'Space Grotesk', 'Inter', sans-serif;
+      letter-spacing: -0.02em;
+    }
+    .studio-header p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.5;
+      max-width: 760px;
+    }
+    .studio-local-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 11px;
+      border-radius: 999px;
+      border: 1px solid rgba(16, 185, 129, 0.35);
+      background: rgba(16, 185, 129, 0.1);
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+    .studio-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1.25fr) minmax(300px, 0.75fr);
+      gap: 16px;
+      align-items: start;
+    }
+    .studio-workspace,
+    .studio-sidebar {
+      min-width: 0;
+    }
+    .studio-dropzone {
+      border: 2px dashed rgba(8, 164, 213, 0.45);
+      border-radius: 14px;
+      padding: 14px;
+      text-align: center;
+      color: var(--muted);
+      background: rgba(8, 164, 213, 0.05);
+      cursor: pointer;
+      transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
+    }
+    .studio-dropzone:hover,
+    .studio-dropzone.dragging {
+      border-color: var(--primary);
+      background: rgba(8, 164, 213, 0.12);
+      transform: translateY(-1px);
+    }
+    .studio-dropzone strong {
+      color: var(--text);
+    }
+    .studio-file-meta {
+      display: block;
+      margin-top: 5px;
+      font-size: 12px;
+      word-break: break-word;
+    }
+    .studio-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 10px 0;
+    }
+    .studio-toolbar .button,
+    .studio-tool .button {
+      appearance: none;
+      font-size: 12px;
+      padding: 8px 11px;
+      text-transform: none;
+      letter-spacing: 0.02em;
+      cursor: pointer;
+    }
+    .studio-toolbar .button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+      transform: none;
+    }
+    .studio-editor {
+      display: block;
+      width: 100%;
+      min-height: 390px;
+      resize: vertical;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px;
+      background: var(--surface-2);
+      color: var(--text);
+      font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+      font-size: 13px;
+      line-height: 1.55;
+      tab-size: 2;
+    }
+    .studio-editor:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 4px rgba(8, 164, 213, 0.16);
+      background: var(--surface);
+    }
+    .studio-status {
+      min-height: 22px;
+      margin: 8px 2px 0;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .studio-status.error { color: #ef4444; }
+    .studio-status.success { color: #10b981; }
+    .studio-diagnostics {
+      padding: 14px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: var(--surface-2);
+      margin-bottom: 12px;
+    }
+    .studio-diagnostics h3 {
+      margin: 0 0 10px;
+      font-size: 15px;
+    }
+    .studio-metrics {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .studio-metric {
+      padding: 9px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--surface);
+      min-width: 0;
+    }
+    .studio-metric span {
+      display: block;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+    }
+    .studio-metric strong {
+      display: block;
+      margin-top: 3px;
+      color: var(--text);
+      font-size: 15px;
+      overflow-wrap: anywhere;
+    }
+    .studio-diagnostic-summary {
+      margin: 10px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .studio-tools {
+      display: grid;
+      gap: 9px;
+    }
+    .studio-tool {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--surface-2);
+      overflow: hidden;
+    }
+    .studio-tool summary {
+      cursor: pointer;
+      padding: 12px 14px;
+      color: var(--text);
+      font-weight: 800;
+      list-style-position: inside;
+      user-select: none;
+    }
+    .studio-tool[open] summary {
+      border-bottom: 1px solid var(--border);
+      background: rgba(8, 164, 213, 0.08);
+    }
+    .studio-tool-body {
+      display: grid;
+      gap: 10px;
+      padding: 12px;
+    }
+    .studio-tool-row {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .studio-field {
+      display: grid;
+      gap: 5px;
+      min-width: 0;
+    }
+    .studio-field label {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .studio-field input,
+    .studio-field select {
+      width: 100%;
+      min-width: 0;
+      padding: 9px 10px;
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      background: var(--surface);
+      color: var(--text);
+      font: inherit;
+    }
+    .studio-check {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .studio-help {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
     .info-grid {
       margin-top: 18px;
       display: grid;
@@ -1180,6 +1420,7 @@ function generateSubToolboxPage(configStr, videoId, filename, config) {
       .masthead {
         justify-content: center;
         text-align: center;
+        padding: 54px 0 0;
       }
       .masthead .brand {
         justify-content: center;
@@ -1198,6 +1439,12 @@ function generateSubToolboxPage(configStr, videoId, filename, config) {
       }
       .masthead {
         align-items: flex-start;
+      }
+      .studio-layout {
+        grid-template-columns: 1fr;
+      }
+      .studio-editor {
+        min-height: 330px;
       }
     }
 
@@ -1299,6 +1546,11 @@ function generateSubToolboxPage(configStr, videoId, filename, config) {
         top: 1rem;
         right: 1rem;
       }
+      body { padding-inline: 12px; }
+      .subtitle-studio { padding: 15px; }
+      .studio-tool-row { grid-template-columns: 1fr; }
+      .studio-toolbar .button { flex: 1 1 calc(50% - 8px); justify-content: center; }
+      .studio-editor { min-height: 300px; font-size: 12px; }
     }
   </style>
   <script src="/js/theme-toggle.js?_cb=${escapeHtml(appVersion || 'dev')}" defer></script>
@@ -1419,8 +1671,142 @@ function generateSubToolboxPage(configStr, videoId, filename, config) {
                 <span class="tool-link">${t('toolbox.tools.auto.cta', {}, 'Generate subs')}</span>
               </div>
             </a>
+            <a class="tool-tile" href="#subtitleStudio">
+              <div class="tool-icon">🧪</div>
+              <div>
+                <div class="tool-title">${t('toolbox.studio.tile.title', {}, 'Subtitle Studio')}</div>
+                <p>${t('toolbox.studio.tile.body', {}, 'Repair, retime, rewrap, and clean SRT files locally in your browser.')}</p>
+                <span class="tool-link">${t('toolbox.studio.tile.cta', {}, 'Open studio')}</span>
+              </div>
+            </a>
           </div>
         </div>
+      </div>
+    </section>
+
+    <section class="subtitle-studio" id="subtitleStudio">
+      <div class="studio-header">
+        <div>
+          <div class="eyebrow">${t('toolbox.studio.eyebrow', {}, 'Five local subtitle tools')}</div>
+          <h2>${t('toolbox.studio.title', {}, 'Subtitle Studio')}</h2>
+          <p>${t('toolbox.studio.description', {}, 'Drop in an SRT file, inspect its health, make precise fixes, and download the result. Your subtitle never leaves this browser.')}</p>
+        </div>
+        <span class="studio-local-badge">🔒 ${t('toolbox.studio.localOnly', {}, '100% local processing')}</span>
+      </div>
+      <div class="studio-layout">
+        <div class="studio-workspace">
+          <div class="studio-dropzone" id="studioDropzone" role="button" tabindex="0">
+            <input id="studioFileInput" type="file" accept=".srt,application/x-subrip,text/plain" hidden>
+            <strong>${t('toolbox.studio.dropTitle', {}, 'Drop an SRT here or tap to browse')}</strong>
+            <span class="studio-file-meta" id="studioFileMeta">${t('toolbox.studio.dropMeta', {}, 'UTF-8 · maximum 5 MB · nothing is uploaded')}</span>
+          </div>
+          <div class="studio-toolbar">
+            <button class="button ghost" id="studioUndo" type="button" disabled>↶ ${t('toolbox.studio.actions.undo', {}, 'Undo')}</button>
+            <button class="button ghost" id="studioRedo" type="button" disabled>↷ ${t('toolbox.studio.actions.redo', {}, 'Redo')}</button>
+            <button class="button ghost" id="studioCopy" type="button">⧉ ${t('toolbox.studio.actions.copy', {}, 'Copy')}</button>
+            <button class="button primary" id="studioDownload" type="button">↓ ${t('toolbox.studio.actions.download', {}, 'Download SRT')}</button>
+            <button class="button ghost" id="studioClear" type="button">× ${t('toolbox.studio.actions.clear', {}, 'Clear')}</button>
+          </div>
+          <textarea class="studio-editor" id="studioEditor" spellcheck="false" autocomplete="off" aria-label="${t('toolbox.studio.editorLabel', {}, 'SRT subtitle editor')}" placeholder="${t('toolbox.studio.editorPlaceholder', {}, 'Paste SRT subtitle content here...')}"></textarea>
+          <div class="studio-status" id="studioStatus" role="status" aria-live="polite"></div>
+        </div>
+
+        <aside class="studio-sidebar">
+          <div class="studio-diagnostics">
+            <h3>${t('toolbox.studio.diagnostics.title', {}, 'Live diagnostics')}</h3>
+            <div class="studio-metrics">
+              <div class="studio-metric"><span>${t('toolbox.studio.diagnostics.cues', {}, 'Cues')}</span><strong id="studioCueCount">0</strong></div>
+              <div class="studio-metric"><span>${t('toolbox.studio.diagnostics.duration', {}, 'Duration')}</span><strong id="studioDuration">00:00:00</strong></div>
+              <div class="studio-metric"><span>${t('toolbox.studio.diagnostics.issues', {}, 'Issues')}</span><strong id="studioIssueCount">0</strong></div>
+              <div class="studio-metric"><span>${t('toolbox.studio.diagnostics.characters', {}, 'Characters')}</span><strong id="studioCharacterCount">0</strong></div>
+            </div>
+            <p class="studio-diagnostic-summary" id="studioDiagnosticSummary">${t('toolbox.studio.diagnostics.empty', {}, 'Load or paste an SRT to start checking it.')}</p>
+          </div>
+
+          <div class="studio-tools">
+            <details class="studio-tool" open>
+              <summary>1. ${t('toolbox.studio.repair.title', {}, 'Validate + repair')}</summary>
+              <div class="studio-tool-body">
+                <p class="studio-help">${t('toolbox.studio.repair.help', {}, 'Sorts cues, rebuilds numbering, normalizes timestamps, fixes invalid durations, and optionally removes overlaps.')}</p>
+                <label class="studio-check"><input type="checkbox" id="studioFixOverlaps" checked> ${t('toolbox.studio.repair.overlaps', {}, 'Resolve overlapping cues')}</label>
+                <button class="button primary" type="button" data-studio-action="repair">${t('toolbox.studio.repair.action', {}, 'Repair SRT')}</button>
+              </div>
+            </details>
+
+            <details class="studio-tool">
+              <summary>2. ${t('toolbox.studio.shift.title', {}, 'Shift timing')}</summary>
+              <div class="studio-tool-body">
+                <p class="studio-help">${t('toolbox.studio.shift.help', {}, 'Use a positive value for later subtitles or a negative value for earlier subtitles.')}</p>
+                <div class="studio-field">
+                  <label for="studioOffset">${t('toolbox.studio.shift.offset', {}, 'Offset in milliseconds')}</label>
+                  <input id="studioOffset" type="number" step="100" value="500">
+                </div>
+                <button class="button primary" type="button" data-studio-action="shift">${t('toolbox.studio.shift.action', {}, 'Apply offset')}</button>
+              </div>
+            </details>
+
+            <details class="studio-tool">
+              <summary>3. ${t('toolbox.studio.fps.title', {}, 'Convert frame rate')}</summary>
+              <div class="studio-tool-body">
+                <p class="studio-help">${t('toolbox.studio.fps.help', {}, 'Retimes every cue for a different video frame rate without changing its text.')}</p>
+                <div class="studio-tool-row">
+                  <div class="studio-field">
+                    <label for="studioSourceFps">${t('toolbox.studio.fps.source', {}, 'Source FPS')}</label>
+                    <input id="studioSourceFps" type="number" min="1" max="240" step="0.001" value="23.976">
+                  </div>
+                  <div class="studio-field">
+                    <label for="studioTargetFps">${t('toolbox.studio.fps.target', {}, 'Target FPS')}</label>
+                    <input id="studioTargetFps" type="number" min="1" max="240" step="0.001" value="25">
+                  </div>
+                </div>
+                <button class="button primary" type="button" data-studio-action="fps">${t('toolbox.studio.fps.action', {}, 'Convert FPS')}</button>
+              </div>
+            </details>
+
+            <details class="studio-tool">
+              <summary>4. ${t('toolbox.studio.wrap.title', {}, 'Smart line wrapping')}</summary>
+              <div class="studio-tool-body">
+                <p class="studio-help">${t('toolbox.studio.wrap.help', {}, 'Rebalances words into readable lines without deleting subtitle text.')}</p>
+                <div class="studio-tool-row">
+                  <div class="studio-field">
+                    <label for="studioMaxLength">${t('toolbox.studio.wrap.length', {}, 'Characters per line')}</label>
+                    <input id="studioMaxLength" type="number" min="10" max="100" step="1" value="42">
+                  </div>
+                  <div class="studio-field">
+                    <label for="studioMaxLines">${t('toolbox.studio.wrap.lines', {}, 'Maximum lines')}</label>
+                    <select id="studioMaxLines">
+                      <option value="1">1</option>
+                      <option value="2" selected>2</option>
+                      <option value="3">3</option>
+                      <option value="4">4</option>
+                    </select>
+                  </div>
+                </div>
+                <button class="button primary" type="button" data-studio-action="wrap">${t('toolbox.studio.wrap.action', {}, 'Rewrap text')}</button>
+              </div>
+            </details>
+
+            <details class="studio-tool">
+              <summary>5. ${t('toolbox.studio.replace.title', {}, 'Find + replace')}</summary>
+              <div class="studio-tool-body">
+                <p class="studio-help">${t('toolbox.studio.replace.help', {}, 'Changes subtitle text only; numbering and timestamps stay protected.')}</p>
+                <div class="studio-field">
+                  <label for="studioFind">${t('toolbox.studio.replace.find', {}, 'Find')}</label>
+                  <input id="studioFind" type="text" maxlength="256">
+                </div>
+                <div class="studio-field">
+                  <label for="studioReplacement">${t('toolbox.studio.replace.replacement', {}, 'Replace with')}</label>
+                  <input id="studioReplacement" type="text">
+                </div>
+                <div class="studio-tool-row">
+                  <label class="studio-check"><input type="checkbox" id="studioRegex"> ${t('toolbox.studio.replace.regex', {}, 'Regular expression')}</label>
+                  <label class="studio-check"><input type="checkbox" id="studioCaseSensitive"> ${t('toolbox.studio.replace.case', {}, 'Case sensitive')}</label>
+                </div>
+                <button class="button primary" type="button" data-studio-action="replace">${t('toolbox.studio.replace.action', {}, 'Replace text')}</button>
+              </div>
+            </details>
+          </div>
+        </aside>
       </div>
     </section>
 
@@ -1429,6 +1815,7 @@ function generateSubToolboxPage(configStr, videoId, filename, config) {
     </div>
 
   </div>
+  <script src="/js/subtitle-studio.js?v=${escapeHtml(appVersion || 'dev')}&_cb=${escapeHtml(appVersion || 'dev')}"></script>
   <script src="/js/subtitle-menu.js?v=${escapeHtml(appVersion || 'dev')}&_cb=${escapeHtml(appVersion || 'dev')}"></script>
   <script>
     const TOOLBOX = ${safeJsonSerialize({
@@ -1441,7 +1828,310 @@ function generateSubToolboxPage(configStr, videoId, filename, config) {
     const SUBTITLE_MENU_SOURCES = ${JSON.stringify(config.sourceLanguages || [])};
     const SUBTITLE_MENU_TARGET_CODES = ${JSON.stringify(config.targetLanguages || [])};
     const SUBTITLE_LANGUAGE_MAPS = ${safeJsonSerialize(languageMaps)};
+    const STUDIO_COPY = ${safeJsonSerialize({
+      loaded: t('toolbox.studio.status.loaded', { name: '{name}' }, 'Loaded {name}'),
+      repaired: t('toolbox.studio.status.repaired', {}, 'SRT repaired and normalized.'),
+      shifted: t('toolbox.studio.status.shifted', { amount: '{amount}' }, 'Timing shifted by {amount} ms.'),
+      fps: t('toolbox.studio.status.fps', { source: '{source}', target: '{target}' }, 'Converted {source} FPS to {target} FPS.'),
+      wrapped: t('toolbox.studio.status.wrapped', {}, 'Subtitle lines rewrapped.'),
+      replaced: t('toolbox.studio.status.replaced', {}, 'Text replacement completed.'),
+      copied: t('toolbox.studio.status.copied', {}, 'Copied to clipboard.'),
+      downloaded: t('toolbox.studio.status.downloaded', {}, 'SRT downloaded.'),
+      cleared: t('toolbox.studio.status.cleared', {}, 'Editor cleared.'),
+      undone: t('toolbox.studio.status.undone', {}, 'Last change undone.'),
+      redone: t('toolbox.studio.status.redone', {}, 'Change restored.'),
+      restored: t('toolbox.studio.status.restored', {}, 'Local draft restored.'),
+      empty: t('toolbox.studio.status.empty', {}, 'Load or paste an SRT first.'),
+      invalidFile: t('toolbox.studio.status.invalidFile', {}, 'Please choose an .srt file.'),
+      tooLarge: t('toolbox.studio.status.tooLarge', {}, 'Subtitle text is larger than the 5 MB browser processing limit.'),
+      copyFailed: t('toolbox.studio.status.copyFailed', {}, 'Clipboard access failed. Select the text and copy it manually.'),
+      noIssues: t('toolbox.studio.diagnostics.noIssues', {}, 'No structural or readability issues detected.'),
+      diagnostics: t('toolbox.studio.diagnostics.summary', {
+        invalid: '{invalid}',
+        overlaps: '{overlaps}',
+        reversed: '{reversed}',
+        order: '{order}',
+        longLines: '{longLines}',
+        speed: '{speed}'
+      }, 'Invalid blocks: {invalid} · overlaps: {overlaps} · invalid durations: {reversed} · out of order: {order} · long lines: {longLines} · fast cues: {speed}'),
+      fileMeta: t('toolbox.studio.fileMeta', { name: '{name}', size: '{size}' }, '{name} · {size} KB'),
+      filename: t('toolbox.studio.downloadName', {}, 'subtitle-studio.srt')
+    })};
     let subtitleMenuInstance = null;
+
+    (function initSubtitleStudio() {
+      const studio = window.SubtitleStudio;
+      const editor = document.getElementById('studioEditor');
+      if (!studio || !editor) return;
+      const dropzone = document.getElementById('studioDropzone');
+      const fileInput = document.getElementById('studioFileInput');
+      const fileMeta = document.getElementById('studioFileMeta');
+      const status = document.getElementById('studioStatus');
+      const undoButton = document.getElementById('studioUndo');
+      const redoButton = document.getElementById('studioRedo');
+      const undoStack = [];
+      const redoStack = [];
+      const draftKey = 'submaker.subtitleStudio.draft.v1';
+      let loadedFilename = '';
+      let saveTimer = null;
+      let diagnosticsTimer = null;
+      let editBaseline = '';
+
+      const substitute = (template, values) => {
+        let output = String(template || '');
+        Object.keys(values || {}).forEach((key) => {
+          output = output.split('{' + key + '}').join(String(values[key]));
+        });
+        return output;
+      };
+      const setStatus = (message, tone) => {
+        status.textContent = message || '';
+        status.className = 'studio-status' + (tone ? ' ' + tone : '');
+      };
+      const updateHistoryButtons = () => {
+        undoButton.disabled = undoStack.length === 0;
+        redoButton.disabled = redoStack.length === 0;
+      };
+      const formatDuration = (ms) => {
+        const total = Math.max(0, Math.round((Number(ms) || 0) / 1000));
+        const hours = Math.floor(total / 3600);
+        const minutes = Math.floor((total % 3600) / 60);
+        const seconds = total % 60;
+        return [hours, minutes, seconds].map(value => String(value).padStart(2, '0')).join(':');
+      };
+      const saveDraft = () => {
+        try {
+          if (editor.value) localStorage.setItem(draftKey, editor.value);
+          else localStorage.removeItem(draftKey);
+        } catch (_) { /* local drafts are best effort */ }
+      };
+      const scheduleDraft = () => {
+        if (saveTimer) clearTimeout(saveTimer);
+        saveTimer = setTimeout(saveDraft, 450);
+      };
+      const updateDiagnostics = () => {
+        if (editor.value.length > studio.DEFAULT_MAX_TEXT_CHARS) {
+          document.getElementById('studioCueCount').textContent = '—';
+          document.getElementById('studioDuration').textContent = '—';
+          document.getElementById('studioIssueCount').textContent = '1';
+          document.getElementById('studioCharacterCount').textContent = String(editor.value.length);
+          document.getElementById('studioDiagnosticSummary').textContent = STUDIO_COPY.tooLarge;
+          return;
+        }
+        const report = studio.analyzeSrt(editor.value);
+        document.getElementById('studioCueCount').textContent = String(report.cueCount);
+        document.getElementById('studioDuration').textContent = formatDuration(report.durationMs);
+        document.getElementById('studioIssueCount').textContent = String(report.issueCount);
+        document.getElementById('studioCharacterCount').textContent = String(editor.value.length);
+        const summary = document.getElementById('studioDiagnosticSummary');
+        if (!editor.value.trim()) {
+          summary.textContent = ${JSON.stringify(t('toolbox.studio.diagnostics.empty', {}, 'Load or paste an SRT to start checking it.'))};
+        } else if (report.issueCount === 0) {
+          summary.textContent = STUDIO_COPY.noIssues;
+        } else {
+          summary.textContent = substitute(STUDIO_COPY.diagnostics, {
+            invalid: report.invalidBlocks,
+            overlaps: report.overlaps,
+            reversed: report.reversed,
+            order: report.outOfOrder,
+            longLines: report.longLines,
+            speed: report.highCps
+          });
+        }
+      };
+      const scheduleDiagnostics = () => {
+        if (diagnosticsTimer) clearTimeout(diagnosticsTimer);
+        diagnosticsTimer = setTimeout(updateDiagnostics, 120);
+      };
+      const commit = (nextValue, message) => {
+        const next = String(nextValue == null ? '' : nextValue);
+        if (next === editor.value) {
+          setStatus(message || '', 'success');
+          return;
+        }
+        undoStack.push(editor.value);
+        if (undoStack.length > 30) undoStack.shift();
+        redoStack.length = 0;
+        editor.value = next;
+        editBaseline = next;
+        updateHistoryButtons();
+        updateDiagnostics();
+        scheduleDraft();
+        setStatus(message || '', 'success');
+      };
+      const ensureContent = () => {
+        if (editor.value.trim()) return true;
+        setStatus(STUDIO_COPY.empty, 'error');
+        editor.focus();
+        return false;
+      };
+      const runAction = (action) => {
+        if (!ensureContent()) return;
+        try {
+          if (action === 'repair') {
+            commit(studio.repairSrt(editor.value, {
+              fixOverlaps: document.getElementById('studioFixOverlaps').checked
+            }), STUDIO_COPY.repaired);
+          } else if (action === 'shift') {
+            const amount = Number(document.getElementById('studioOffset').value);
+            commit(studio.shiftTimings(editor.value, amount), substitute(STUDIO_COPY.shifted, { amount }));
+          } else if (action === 'fps') {
+            const source = Number(document.getElementById('studioSourceFps').value);
+            const target = Number(document.getElementById('studioTargetFps').value);
+            commit(studio.retimeFps(editor.value, source, target), substitute(STUDIO_COPY.fps, { source, target }));
+          } else if (action === 'wrap') {
+            commit(studio.smartWrap(editor.value, {
+              maxLineLength: Number(document.getElementById('studioMaxLength').value),
+              maxLines: Number(document.getElementById('studioMaxLines').value)
+            }), STUDIO_COPY.wrapped);
+          } else if (action === 'replace') {
+            commit(studio.searchReplace(
+              editor.value,
+              document.getElementById('studioFind').value,
+              document.getElementById('studioReplacement').value,
+              {
+                useRegex: document.getElementById('studioRegex').checked,
+                caseSensitive: document.getElementById('studioCaseSensitive').checked
+              }
+            ), STUDIO_COPY.replaced);
+          }
+        } catch (error) {
+          setStatus(error && error.message ? error.message : String(error), 'error');
+        }
+      };
+      const readFile = async (file) => {
+        if (!file) return;
+        try {
+          studio.assertFileSize(file);
+          if (!/\\.srt$/i.test(file.name || '')) throw new Error(STUDIO_COPY.invalidFile);
+          const content = await file.text();
+          loadedFilename = String(file.name || '');
+          commit(studio.normalizeInput(content), substitute(STUDIO_COPY.loaded, { name: loadedFilename }));
+          fileMeta.textContent = substitute(STUDIO_COPY.fileMeta, {
+            name: loadedFilename,
+            size: Math.max(1, Math.round(Number(file.size || 0) / 1024))
+          });
+        } catch (error) {
+          setStatus(error && error.message ? error.message : String(error), 'error');
+        } finally {
+          fileInput.value = '';
+        }
+      };
+
+      document.querySelectorAll('[data-studio-action]').forEach(button => {
+        button.addEventListener('click', () => runAction(button.dataset.studioAction));
+      });
+      dropzone.addEventListener('click', () => fileInput.click());
+      dropzone.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          fileInput.click();
+        }
+      });
+      fileInput.addEventListener('change', () => readFile(fileInput.files && fileInput.files[0]));
+      ['dragenter', 'dragover'].forEach(type => dropzone.addEventListener(type, (event) => {
+        event.preventDefault();
+        dropzone.classList.add('dragging');
+      }));
+      ['dragleave', 'drop'].forEach(type => dropzone.addEventListener(type, (event) => {
+        event.preventDefault();
+        dropzone.classList.remove('dragging');
+      }));
+      dropzone.addEventListener('drop', event => readFile(event.dataTransfer && event.dataTransfer.files[0]));
+
+      editor.addEventListener('focus', () => { editBaseline = editor.value; });
+      editor.addEventListener('blur', () => {
+        if (editor.value !== editBaseline) {
+          undoStack.push(editBaseline);
+          if (undoStack.length > 30) undoStack.shift();
+          redoStack.length = 0;
+          editBaseline = editor.value;
+          updateHistoryButtons();
+        }
+      });
+      editor.addEventListener('input', () => {
+        scheduleDiagnostics();
+        scheduleDraft();
+      });
+      undoButton.addEventListener('click', () => {
+        if (!undoStack.length) return;
+        redoStack.push(editor.value);
+        editor.value = undoStack.pop();
+        editBaseline = editor.value;
+        updateHistoryButtons();
+        updateDiagnostics();
+        scheduleDraft();
+        setStatus(STUDIO_COPY.undone, 'success');
+      });
+      redoButton.addEventListener('click', () => {
+        if (!redoStack.length) return;
+        undoStack.push(editor.value);
+        editor.value = redoStack.pop();
+        editBaseline = editor.value;
+        updateHistoryButtons();
+        updateDiagnostics();
+        scheduleDraft();
+        setStatus(STUDIO_COPY.redone, 'success');
+      });
+      document.getElementById('studioClear').addEventListener('click', () => {
+        commit('', STUDIO_COPY.cleared);
+        loadedFilename = '';
+      });
+      document.getElementById('studioCopy').addEventListener('click', async () => {
+        if (!ensureContent()) return;
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(editor.value);
+          } else {
+            editor.select();
+            if (!document.execCommand('copy')) throw new Error(STUDIO_COPY.copyFailed);
+          }
+          setStatus(STUDIO_COPY.copied, 'success');
+        } catch (_) {
+          setStatus(STUDIO_COPY.copyFailed, 'error');
+        }
+      });
+      document.getElementById('studioDownload').addEventListener('click', () => {
+        if (!ensureContent()) return;
+        const baseName = (loadedFilename || STUDIO_COPY.filename)
+          .replace(/\\.srt$/i, '')
+          .replace(/[<>:"/\\\\|?*\\u0000-\\u001F]/g, '_')
+          .slice(0, 120) || 'subtitle';
+        const blob = new Blob(['\\uFEFF' + studio.normalizeInput(editor.value) + '\\n'], {
+          type: 'application/x-subrip;charset=utf-8'
+        });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = baseName + '-studio.srt';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        setStatus(STUDIO_COPY.downloaded, 'success');
+      });
+      document.addEventListener('keydown', (event) => {
+        if (!(event.ctrlKey || event.metaKey)) return;
+        if (event.key.toLowerCase() === 's' && document.activeElement === editor) {
+          event.preventDefault();
+          document.getElementById('studioDownload').click();
+        } else if (event.key === 'Enter' && document.activeElement === editor) {
+          event.preventDefault();
+          runAction('repair');
+        }
+      });
+
+      try {
+        const draft = localStorage.getItem(draftKey);
+        if (draft) {
+          editor.value = draft;
+          editBaseline = draft;
+          setStatus(STUDIO_COPY.restored, 'success');
+        }
+      } catch (_) { /* drafts are optional */ }
+      updateDiagnostics();
+      updateHistoryButtons();
+    })();
 
     function initStreamRefreshButton(opts) {
       const btn = document.getElementById(opts.buttonId);

@@ -51,6 +51,7 @@ const NON_CACHEABLE_ASSETS = new Set([
     '/js/theme-toggle.js',
     '/js/sw-register.js',
     '/js/quick-setup.js',
+    '/js/subtitle-studio.js',
     '/config.js',
     '/sw.js'
 ]);

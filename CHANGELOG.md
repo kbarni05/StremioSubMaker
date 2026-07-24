@@ -6,6 +6,42 @@ All notable changes to this project will be documented in this file.
 
 No changes yet.
 
+## SubMaker v1.6.0
+
+**Subtitle Studio — Five New Toolbox Features:**
+
+- **Validate + repair:** sorts cues, rebuilds numbering, normalizes comma/dot timestamps, repairs invalid durations, and safely resolves overlaps.
+
+- **Precision timing shift:** moves a complete subtitle earlier or later by an exact millisecond offset while clamping negative timestamps.
+
+- **Frame-rate conversion:** retimes SRT cues between arbitrary source and target FPS values, including common 23.976/24/25/29.97 workflows.
+
+- **Smart line wrapping:** rebalances subtitle text into one to four readable lines without truncating or deleting words.
+
+- **Protected find + replace:** supports literal and regular-expression replacement inside cue text while leaving numbering and timestamps untouched.
+
+**Quality of Life:**
+
+- **Local-first workspace:** drag-and-drop or paste SRT content, receive live cue/duration/readability diagnostics, and process everything in the browser without uploading subtitle text.
+
+- **Safe editing workflow:** 30-step undo/redo history, copy, UTF-8 BOM download, keyboard shortcuts, automatic local draft recovery, and mobile-responsive controls.
+
+- **Actionable diagnostics:** reports malformed blocks, overlaps, invalid durations, ordering problems, long lines, and excessive reading speed before download.
+
+- **Complete localization:** all Subtitle Studio controls, help, status messages, and diagnostics are available in English and Hungarian.
+
+**Bug Fixes:**
+
+- **No silent data loss:** transformations stop when an unparseable block is present instead of dropping its subtitle text during serialization.
+
+- **Tolerant SRT parsing:** handles UTF-8 BOM, CRLF/LF line endings, missing numeric indexes, and both comma and dot millisecond separators.
+
+- **Bounded browser work:** rejects files larger than 5 MB and search patterns longer than 256 characters to avoid accidental UI stalls.
+
+- **Safe generated UI:** regression tests compile the server-generated Toolbox scripts and ensure subtitle content is only written through form values or `textContent`.
+
+- **Fresh browser assets:** the service worker bypass list includes the new versioned studio processor to prevent stale code after Watchtower upgrades.
+
 ## SubMaker v1.5.5
 
 **Stremio Display:**

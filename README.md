@@ -52,6 +52,25 @@ Check their [FREE Stremio Addons Guide](https://stremio-addons-guide.elfhosted.c
 | **Smart Caching** | Shared translation database — translate once, benefit everyone |
 | **Timestamp Workflows** | XML Tags, JSON, Numbered Timestamps, Send Timestamps to AI |
 | **No-Translation Mode** | Just fetch subtitles without translation |
+| **Subtitle Studio** | Repair, shift, FPS-convert, rewrap, and safely search/replace SRT files locally |
+
+---
+
+### 🧪 Subtitle Studio
+
+Open **Sub Toolbox → Subtitle Studio** to work on SRT files without uploading their
+content. The studio provides:
+
+1. Structural validation and safe repair
+2. Exact positive or negative timing shifts
+3. Source-to-target FPS conversion
+4. Smart one-to-four-line text wrapping
+5. Literal or regular-expression find and replace
+
+Live diagnostics flag malformed blocks, overlaps, invalid durations, ordering
+problems, long lines, and fast reading speed. Drag-and-drop, undo/redo, copy,
+UTF-8 download, mobile controls, and local draft recovery are built in. Files over
+5 MB are rejected to keep browser processing responsive.
 
 ---
 

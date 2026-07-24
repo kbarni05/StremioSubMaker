@@ -145,6 +145,17 @@ next stream/list opening.
 2. Right-click the video → "Download Subtitles" to open in browser
 3. Ensure browser allows popups from your SubMaker domain
 
+### 🧪 Subtitle Studio Refuses to Apply a Change
+
+- **Malformed block reported** — A block without a valid timestamp is never silently
+  discarded. Correct that block in the editor, then run the operation again.
+- **File rejected** — The local editor accepts `.srt` files up to 5 MB. Larger files
+  should be split before browser processing.
+- **Old interface after an update** — Reload the Toolbox once with `Ctrl+F5`; the
+  versioned studio script bypasses the service-worker asset cache.
+- **Draft unexpectedly returns** — Use **Clear** to remove both the editor content
+  and its browser-local recovery draft.
+
 ---
 
 ## Docker / Self-Hosting Issues
