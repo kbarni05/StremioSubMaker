@@ -6,6 +6,35 @@ All notable changes to this project will be documented in this file.
 
 No changes yet.
 
+## SubMaker v1.7.1
+
+**Complete Hungarian Interface:**
+
+- **All tool pages covered:** 588 previously missing Hungarian UI messages now cover
+  Configure, File Translation, Translation History, Subtitle Sync, Automatic
+  Subtitles, Embedded Subtitles, downloads, logs, progress states, errors, and
+  advanced controls.
+
+- **Consistent Hungarian navigation:** `Sub Toolbox`, `Token Vault`, and `Learn Mode`
+  are now shown as `Felirat-eszköztár`, `Tokenkezelő`, and `Tanulási mód` throughout
+  the main UI, Stremio actions, navigation, dialogs, and tool pages.
+
+- **Detailed workflow copy:** provider summaries, queue states, audio-track selection,
+  sync engines and scan presets, hash checks, extraction, retranslations, and
+  generated-subtitle delivery no longer fall back to English.
+
+**Bug Fixes:**
+
+- **Full generator coverage:** the Hungarian coverage test now scans every public
+  HTML/JavaScript asset and every server-side page generator.
+
+- **All translation helpers checked:** literal keys used through `t`, `tr`, `tt`,
+  `translate`, and `tConfig` are required to have explicit Hungarian values.
+
+- **English fallback detection:** the test rejects UI messages that silently reuse
+  English text, while allowing only documented product names, model names, units,
+  and technical identifiers.
+
 ## SubMaker v1.7.0
 
 **Statistics & Performance:**

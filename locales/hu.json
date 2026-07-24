@@ -1,5 +1,5 @@
 {
-  "_comment": "A magyar locale a leggyakrabban használt felületeket fordítja. A hiányzó haladó szövegek automatikusan angolul jelennek meg.",
+  "_comment": "A magyar nyelvi csomag a teljes felhasználói felületet lefedi; az automatikus teszt megakadályozza az angol visszaeséseket.",
   "lang": "hu",
   "messages": {
     "common": {
