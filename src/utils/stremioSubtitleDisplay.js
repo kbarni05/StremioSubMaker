@@ -46,19 +46,16 @@ function getLocalizedLanguageName(code, uiLanguage = 'en', fallback = '') {
   return sanitizeStremioLabel(fallback || code || tag);
 }
 
-function buildStremioActionLabel({ kind = 'translate', language, sourceCode, index, total, mobileMode = false, t }) {
+function buildStremioActionLabel({ kind = 'translate', language, mobileMode = false, t }) {
   const safeLanguage = sanitizeStremioLabel(language || '');
-  const safeSource = sanitizeStremioLabel(String(sourceCode || '').toUpperCase(), 16);
-  const safeIndex = Math.max(1, Number.parseInt(index, 10) || 1);
-  const safeTotal = Math.max(safeIndex, Number.parseInt(total, 10) || safeIndex);
   const key = kind === 'learn'
     ? 'subtitleMenu.stremio.learnEntry'
     : (mobileMode ? 'subtitleMenu.stremio.mobileEntry' : 'subtitleMenu.stremio.makeEntry');
   const fallback = kind === 'learn'
-    ? `◇ Learn ${safeLanguage} · ${safeIndex}/${safeTotal} · ${safeSource}`
-    : `${mobileMode ? '📱' : '▶'} Make ${safeLanguage} · ${safeIndex}/${safeTotal} · ${safeSource}`;
+    ? `◇ Learn ${safeLanguage}`
+    : `${mobileMode ? '📱' : '▶'} Make ${safeLanguage}`;
   const translated = typeof t === 'function'
-    ? t(key, { language: safeLanguage, source: safeSource, index: safeIndex, total: safeTotal }, fallback)
+    ? t(key, { language: safeLanguage }, fallback)
     : fallback;
   return sanitizeStremioLabel(translated);
 }

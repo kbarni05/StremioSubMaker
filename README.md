@@ -139,17 +139,18 @@ Visit: **http://localhost:7001**
 
 ```
 1. Install SubMaker in Stremio
-2. Play content → the subtitle list shows a translation entry for every source subtitle
-3. Choose the matching numbered entry, for example `Make Hungarian · source 2/16 · ENG`
+2. Play content → the subtitle list shows one translation group per target language
+3. Open the group (for example `Make Hungarian`) and choose the source subtitle at the matching position
 4. Wait ~1-3 minutes → AI translates in batches
 5. Reselect the subtitle → Now translated!
 6. Next time? Instant — cached in database
 ```
 
 Stremio addons can return subtitle `id`, `url`, and `lang` fields, but cannot inject
-arbitrary custom controls into the native player. SubMaker therefore keeps normal
-subtitle language codes intact and uses concise, localized `lang` labels only for
-interactive translation, Learn Mode, cache, and toolbox entries.
+arbitrary custom controls into the native player. Stremio also uses `lang` as the
+grouping key, so every source entry for the same target language intentionally shares
+one concise, localized label. The individual source mapping remains unique through
+each entry's `id`, `url`, and deterministic list position.
 
 ### Configuration Steps
 
@@ -234,7 +235,7 @@ Test other **Translation Workflow** in Settings:
 1. **Enable Mobile Mode** — Check “Mobile Mode (complete delivery)” in Other Settings
 2. **Choose the maximum wait** — Four minutes is recommended; slower/local models can use 6–10 minutes
 3. **Select the 📱 entry** — Repeated requests share one translation and return only the complete subtitle
-4. **If the limit is reached** — Translation continues; reopen the video/list and select the same numbered entry
+4. **If the limit is reached** — Translation continues; reopen the video/list and select the same source entry inside the target-language group
 5. **Use Flash-Lite** — Usually the fastest option for mobile
 
 Mobile Mode’s total wait is separate from an individual AI request timeout. Self-hosted

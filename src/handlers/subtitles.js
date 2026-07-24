@@ -830,7 +830,7 @@ function createMobileModeTimeoutSubtitle(uiLanguage = 'en') {
   return ensureInformationalSubtitleSize(`1
 00:00:00,000 --> 04:00:00,000
 ${t('subtitle.mobileTimeoutTitle', {}, 'MOBILE TRANSLATION STILL RUNNING')}
-${t('subtitle.mobileTimeoutBody', {}, 'The translation continues in the background. Reopen the video or subtitle list, then select the same numbered entry again.')}`, null, uiLanguage);
+${t('subtitle.mobileTimeoutBody', {}, 'The translation continues in the background. Reopen the video or subtitle list, then select the same source entry inside the target-language group.')}`, null, uiLanguage);
 }
 
 // Helpers to build partial SRT with an end-of-file warning block
@@ -3367,14 +3367,10 @@ function createSubtitleHandler(config) {
           );
           log.debug(() => `[Subtitles] Creating translation entries for ${baseName} (${targetLang})`);
 
-          for (let sourceIndex = 0; sourceIndex < sourceSubtitles.length; sourceIndex += 1) {
-            const sourceSub = sourceSubtitles[sourceIndex];
+          for (const sourceSub of sourceSubtitles) {
             const displayName = buildStremioActionLabel({
               kind: 'translate',
               language: baseName,
-              sourceCode: sourceSub.languageCode,
-              index: sourceIndex + 1,
-              total: sourceSubtitles.length,
               mobileMode: config.mobileMode === true,
               t,
             });
@@ -3415,14 +3411,10 @@ function createSubtitleHandler(config) {
               uiLanguage,
               getLanguageName(learnLang) || learnLang
             );
-            for (let sourceIndex = 0; sourceIndex < sourceSubtitles.length; sourceIndex += 1) {
-              const sourceSub = sourceSubtitles[sourceIndex];
+            for (const sourceSub of sourceSubtitles) {
               const displayName = buildStremioActionLabel({
                 kind: 'learn',
                 language: baseName,
-                sourceCode: sourceSub.languageCode,
-                index: sourceIndex + 1,
-                total: sourceSubtitles.length,
                 t,
               });
               learnEntries.push({

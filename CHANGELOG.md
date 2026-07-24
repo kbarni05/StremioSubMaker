@@ -6,6 +6,26 @@ All notable changes to this project will be documented in this file.
 
 No changes yet.
 
+## SubMaker v1.5.5
+
+**Stremio Display:**
+
+- **One group per target language:** every source entry for a translation or Learn Mode action now uses the same concise player-visible label, restoring Stremio's native language grouping.
+
+- **Source selection preserved:** individual source subtitles remain uniquely mapped through their `id`, `url`, and deterministic list position inside the shared target-language group.
+
+- **Consistent mobile behavior:** Mobile Mode uses the same grouping rule while retaining its distinct localized mobile label.
+
+**Bug Fixes:**
+
+- **Fixed fragmented translation menus:** removed source position and language code from the `lang` field because Stremio treats every distinct `lang` value as a separate group.
+
+- **Fixed misleading retry guidance:** mobile timeout help now directs users to the same source entry inside the target-language group instead of a no-longer-visible numbered label.
+
+**Testing:**
+
+- **Grouping regression coverage:** automated tests verify that different source languages and positions produce one identical Stremio group label for a target language.
+
 ## SubMaker v1.5.4
 
 **Mobile Mode:**

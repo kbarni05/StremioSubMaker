@@ -302,13 +302,13 @@
     "subtitleMenu.meta.waitingLinked": "Várakozás a kapcsolódó adatfolyamra",
     "subtitleMenu.meta.totalSubtitles": "Feliratok száma",
     "subtitleMenu.meta.languagesAvailable": "Elérhető nyelvek",
-    "subtitleMenu.stremio.makeEntry": "▶ Fordítás: {language} · {index}/{total}. forrás · {source}",
-    "subtitleMenu.stremio.mobileEntry": "📱 Mobilfordítás: {language} · {index}/{total}. forrás · {source}",
-    "subtitleMenu.stremio.learnEntry": "◇ Tanulás: {language} · {index}/{total}. forrás · {source}",
+    "subtitleMenu.stremio.makeEntry": "▶ Fordítás: {language}",
+    "subtitleMenu.stremio.mobileEntry": "📱 Mobilfordítás: {language}",
+    "subtitleMenu.stremio.learnEntry": "◇ Tanulás: {language}",
     "subtitleMenu.stremio.configError": "! SubMaker-hiba",
     "subtitleMenu.stremio.configWarning": "⚠ SubMaker-figyelmeztetés",
     "subtitleMenu.stremio.toolbox": "🧰 Sub Toolbox",
     "subtitle.mobileTimeoutTitle": "A MOBILFORDÍTÁS MÉG FOLYAMATBAN VAN",
-    "subtitle.mobileTimeoutBody": "A fordítás a háttérben folytatódik. Nyisd meg újra a videót vagy a feliratlistát, majd válaszd ki ugyanazt a sorszámozott bejegyzést."
+    "subtitle.mobileTimeoutBody": "A fordítás a háttérben folytatódik. Nyisd meg újra a videót vagy a feliratlistát, majd válaszd ki ugyanazt a forrásbejegyzést a célnyelvi csoportban."
   }
 }
