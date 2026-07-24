@@ -397,6 +397,23 @@ const cacheMetrics = {
   lastReset: Date.now()
 };
 
+function getTranslationCacheMetrics() {
+  const hits = Math.max(0, Number(cacheMetrics.hits) || 0);
+  const misses = Math.max(0, Number(cacheMetrics.misses) || 0);
+  const requests = hits + misses;
+  return {
+    hits,
+    misses,
+    hitRate: requests ? Math.round((hits / requests) * 1000) / 10 : null,
+    diskReads: Math.max(0, Number(cacheMetrics.diskReads) || 0),
+    diskWrites: Math.max(0, Number(cacheMetrics.diskWrites) || 0),
+    apiCalls: Math.max(0, Number(cacheMetrics.apiCalls) || 0),
+    estimatedCostSaved: Math.max(0, Number(cacheMetrics.estimatedCostSaved) || 0),
+    filesEvicted: Math.max(0, Number(cacheMetrics.filesEvicted) || 0),
+    since: cacheMetrics.lastReset
+  };
+}
+
 // Single-batch streaming throttles (streaming providers)
 const SINGLE_BATCH_LOG_ENTRY_INTERVAL = Math.max(1, parseInt(process.env.SINGLE_BATCH_LOG_ENTRY_INTERVAL, 10) || 100);
 const SINGLE_BATCH_SRT_REBUILD_STEP_SMALL = Math.max(1, parseInt(process.env.SINGLE_BATCH_SRT_REBUILD_STEP_SMALL, 10) || 75);
@@ -6461,7 +6478,8 @@ module.exports = {
   migrateHistoryNamespace,
   saveRequestToHistory,
   resolveHistoryTitle,
-  enrichHistoryEntriesBackground
+  enrichHistoryEntriesBackground,
+  getTranslationCacheMetrics
 };
 
 // Append the complex object methods to module.exports since they were defined inline

@@ -53,6 +53,7 @@ Check their [FREE Stremio Addons Guide](https://stremio-addons-guide.elfhosted.c
 | **Timestamp Workflows** | XML Tags, JSON, Numbered Timestamps, Send Timestamps to AI |
 | **No-Translation Mode** | Just fetch subtitles without translation |
 | **Subtitle Studio** | Repair, shift, FPS-convert, rewrap, and safely search/replace SRT files locally |
+| **Statistics & Performance** | Translation success, speed, cache, storage, workload, and hardware health dashboard |
 
 ---
 
@@ -71,6 +72,24 @@ Live diagnostics flag malformed blocks, overlaps, invalid durations, ordering
 problems, long lines, and fast reading speed. Drag-and-drop, undo/redo, copy,
 UTF-8 download, mobile controls, and local draft recovery are built in. Files over
 5 MB are rejected to keep browser processing responsive.
+
+---
+
+### 📊 Statistics & Performance
+
+After saving a configuration, use the **Translation History** and
+**Statistics & Performance** shortcuts directly below the main SubMaker header.
+They are also available as separate items in every tool-page navigation menu.
+
+The statistics dashboard shows recent success/failure rates, translation duration,
+cache effectiveness, active jobs, provider and target-language usage, seven-day
+activity, Redis/filesystem cache utilization, sessions, HTTP connections, process
+CPU and memory, system memory pressure, event-loop delay, uptime, and runtime
+architecture. It refreshes every 30 seconds by default and keeps the last successful
+snapshot visible if a refresh fails.
+
+The endpoint requires a valid configuration token and never returns provider API
+keys, Redis credentials, or the complete user configuration.
 
 ---
 

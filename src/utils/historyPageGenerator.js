@@ -279,7 +279,8 @@ function buildToolLinks(configStr, videoId, filename) {
     subToolbox: `/sub-toolbox${query}`,
     smdb: `/smdb${query}`,
     configure: `/configure${query}`,
-    history: `/sub-history${query}`
+    history: `/sub-history${query}`,
+    statistics: `/statistics${query}`
   };
 }
 

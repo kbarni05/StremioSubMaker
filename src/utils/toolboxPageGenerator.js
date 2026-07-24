@@ -360,7 +360,8 @@ function buildToolLinks(configStr, videoId, filename) {
     subToolbox: `/sub-toolbox${buildQuery(withFile)}`,
     smdb: `/smdb${buildQuery(withFile)}`,
     configure: `/configure${buildQuery({ config: configStr })}`,
-    history: `/sub-history${buildQuery(historyParams)}`
+    history: `/sub-history${buildQuery(historyParams)}`,
+    statistics: `/statistics${buildQuery(historyParams)}`
   };
 }
 

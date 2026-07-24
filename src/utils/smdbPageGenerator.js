@@ -293,7 +293,8 @@ async function generateSmdbPage(configStr, videoId, filename, config = {}) {
     subToolbox: `/sub-toolbox?config=${encodeURIComponent(configStr || '')}&videoId=${encodeURIComponent(videoId || '')}&filename=${encodeURIComponent(filename || '')}`,
     smdb: `/smdb?config=${encodeURIComponent(configStr || '')}&videoId=${encodeURIComponent(videoId || '')}&filename=${encodeURIComponent(filename || '')}`,
     configure: `/configure?config=${encodeURIComponent(configStr || '')}`,
-    history: `/sub-history?config=${encodeURIComponent(configStr || '')}&videoId=${encodeURIComponent(videoId || '')}&filename=${encodeURIComponent(filename || '')}`
+    history: `/sub-history?config=${encodeURIComponent(configStr || '')}&videoId=${encodeURIComponent(videoId || '')}&filename=${encodeURIComponent(filename || '')}`,
+    statistics: `/statistics?config=${encodeURIComponent(configStr || '')}&videoId=${encodeURIComponent(videoId || '')}&filename=${encodeURIComponent(filename || '')}`
   };
 
   // Build user language options from config

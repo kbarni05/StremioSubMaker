@@ -6,6 +6,60 @@ All notable changes to this project will be documented in this file.
 
 No changes yet.
 
+## SubMaker v1.7.0
+
+**Statistics & Performance:**
+
+- **New operations dashboard:** translation success, failures, active work, subtitle
+  entry totals, average and p95 duration, cache hit rate, and seven-day activity are
+  visible on one responsive page.
+
+- **Usage breakdowns:** recent translations are grouped by provider, model, source
+  language, and target language without exposing API keys or configuration secrets.
+
+- **Runtime and hardware view:** process CPU, RSS memory, system memory pressure,
+  event-loop p95, uptime, architecture, CPU core count, HTTP sockets, and pending
+  requests help diagnose slow or overloaded deployments.
+
+- **Storage visibility:** Redis/filesystem health and per-cache size/utilization are
+  reported for translations, partial jobs, synchronized, embedded, automatic, SMDB,
+  history, session, and provider-metadata storage.
+
+- **Actionable health insights:** the dashboard highlights storage failure, event-loop
+  lag, memory pressure, low translation success, recent 429 errors, and high active
+  translation load.
+
+**Navigation & Quality of Life:**
+
+- **History promoted to the main UI:** saved configurations now show direct
+  Translation History and Statistics & Performance shortcuts below the SubMaker
+  header, so neither page is hidden inside the Toolbox.
+
+- **First-class navigation:** Statistics is available from every tool page and the
+  mobile drawer, with History remaining beside it.
+
+- **Resilient live refresh:** metrics refresh every 30 seconds by default, support
+  15/30/60-second or manual-only modes, pause in background tabs, retain the last
+  successful snapshot on errors, and provide a manual refresh action.
+
+- **Complete English and Hungarian copy:** page titles, controls, health messages,
+  cache labels, counters, and main-page shortcuts are localized.
+
+**Bug Fixes:**
+
+- **Bounded monitoring overhead:** user-scoped statistics snapshots are cached for
+  10 seconds and rate limited; Redis cache sizes use maintained counters rather than
+  full key scans.
+
+- **No duplicate active-job counts:** shared and runtime in-flight map entries are
+  deduplicated by their underlying translation promise.
+
+- **Responsive navigation fix:** the expanded desktop menu no longer clips its first
+  item around 1280 px, while the 375 px mobile view has no horizontal overflow.
+
+- **Visible mobile menu:** shared theme aliases restore the hamburger icon on the
+  true-dark statistics page.
+
 ## SubMaker v1.6.0
 
 **Subtitle Studio — Five New Toolbox Features:**

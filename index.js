@@ -50,7 +50,7 @@ const { redactToken } = require('./src/utils/security');
 const { getAllLanguages, getAllTranslationLanguages, getLanguageName, toISO6392, findISO6391ByName, canonicalSyncLanguageCode } = require('./src/utils/languages');
 const { generateCacheKeys } = require('./src/utils/cacheKeys');
 const { getCached: getDownloadCached, saveCached: saveDownloadCached, getCacheStats: getDownloadCacheStats } = require('./src/utils/downloadCache');
-const { createSubtitleHandler, handleSubtitleDownload, handleTranslation, createLoadingSubtitle, createSessionTokenErrorSubtitle, createOpenSubtitlesAuthErrorSubtitle, createOpenSubtitlesQuotaExceededSubtitle, createCredentialDecryptionErrorSubtitle, createTranslationErrorSubtitle, readFromPartialCache, hasCachedTranslation, purgeTranslationCache, translationStatus, inFlightTranslations, canUserStartTranslation, getHistoryForUser, migrateHistoryNamespace, resolveHistoryUserHash, saveRequestToHistory, resolveHistoryTitle, enrichHistoryEntriesBackground, maybeConvertToSRT, isSharedTranslationInFlight } = require('./src/handlers/subtitles');
+const { createSubtitleHandler, handleSubtitleDownload, handleTranslation, createLoadingSubtitle, createSessionTokenErrorSubtitle, createOpenSubtitlesAuthErrorSubtitle, createOpenSubtitlesQuotaExceededSubtitle, createCredentialDecryptionErrorSubtitle, createTranslationErrorSubtitle, readFromPartialCache, hasCachedTranslation, purgeTranslationCache, translationStatus, inFlightTranslations, canUserStartTranslation, getHistoryForUser, migrateHistoryNamespace, resolveHistoryUserHash, saveRequestToHistory, resolveHistoryTitle, enrichHistoryEntriesBackground, maybeConvertToSRT, isSharedTranslationInFlight, getTranslationCacheMetrics } = require('./src/handlers/subtitles');
 const GeminiService = require('./src/services/gemini');
 const TranslationEngine = require('./src/services/translationEngine');
 const { createProviderInstance, createTranslationProvider, resolveCfWorkersCredentials } = require('./src/services/translationProviderFactory');
@@ -66,6 +66,8 @@ const { buildEmbeddedHistoryContext, normalizeEmbeddedHistoryValue } = require('
 const { generateSubtitleSyncPage } = require('./src/utils/syncPageGenerator');
 const { generateSubToolboxPage, generateEmbeddedSubtitlePage, generateAutoSubtitlePage } = require('./src/utils/toolboxPageGenerator');
 const { generateHistoryPage, renderHistoryContent } = require('./src/utils/historyPageGenerator');
+const { generateStatisticsPage } = require('./src/utils/statisticsPageGenerator');
+const { summarizeHistory, getRuntimeMetrics, buildInsights } = require('./src/utils/statisticsMetrics');
 const { generateSmdbPage } = require('./src/utils/smdbPageGenerator');
 const { generateConfigurePage } = require('./src/utils/configurePageGenerator');
 const smdbCache = require('./src/utils/smdbCache');
@@ -91,6 +93,7 @@ const {
 const { MAX_SESSION_BRIEF_BATCH, getSessionManager, stripInternalFlags } = require('./src/utils/sessionManager');
 const { runStartupValidation } = require('./src/utils/startupValidation');
 const { StorageUnavailableError } = require('./src/storage/errors');
+const { StorageAdapter, getStorageAdapter } = require('./src/storage');
 const { createRateLimitRedisStore } = require('./src/utils/rateLimitRedisStore');
 const { isBlockedCommunityV5Request, isStremioKaiRequest } = require('./src/utils/stremioClientIdentity');
 const { loadLocale, getTranslator, DEFAULT_LANG } = require('./src/utils/i18n');
@@ -2266,6 +2269,8 @@ app.use((req, res, next) => {
         '/sub-history',
         '/embedded-subtitles',
         '/auto-subtitles',
+        '/statistics',
+        '/api/statistics',
         '/smdb',
         '/api/smdb/list',
         '/api/smdb/download',
@@ -6100,6 +6105,151 @@ app.get('/addon/:config/sub-history', async (req, res) => {
         if (respondStorageUnavailable(res, error, '[Sub History Addon Route]', t)) return;
         log.error(() => '[Sub History Addon Route] Error:', error);
         res.status(500).send(t('server.errors.historyAddonFailed', {}, 'Failed to load History page'));
+    }
+});
+
+// Statistics & Performance dashboard
+const statisticsSnapshotCache = new LRUCache({
+    max: 250,
+    ttl: 10 * 1000
+});
+let storageStatisticsCache = {
+    value: null,
+    expiresAt: 0,
+    inFlight: null
+};
+
+async function collectStorageStatistics() {
+    const now = Date.now();
+    if (storageStatisticsCache.value && storageStatisticsCache.expiresAt > now) {
+        return storageStatisticsCache.value;
+    }
+    if (storageStatisticsCache.inFlight) return storageStatisticsCache.inFlight;
+
+    const storageType = process.env.STORAGE_TYPE || 'redis';
+    storageStatisticsCache.inFlight = (async () => {
+        try {
+            const adapter = await getStorageAdapter();
+            const healthy = await adapter.healthCheck();
+            if (!healthy) return { type: storageType, healthy: false, caches: [] };
+
+            const caches = await Promise.all(Object.values(StorageAdapter.CACHE_TYPES).map(async type => {
+                try {
+                    const currentBytes = Math.max(0, Number(await adapter.size(type)) || 0);
+                    const limitBytes = Number(StorageAdapter.SIZE_LIMITS[type]) || null;
+                    return {
+                        type,
+                        currentBytes,
+                        limitBytes,
+                        utilizationPercent: limitBytes
+                            ? Math.round((currentBytes / limitBytes) * 1000) / 10
+                            : 0
+                    };
+                } catch (error) {
+                    log.debug(() => `[Statistics] Could not read ${type} cache size: ${error.message}`);
+                    return { type, currentBytes: 0, limitBytes: Number(StorageAdapter.SIZE_LIMITS[type]) || null, utilizationPercent: 0 };
+                }
+            }));
+
+            return { type: storageType, healthy: true, caches };
+        } catch (error) {
+            log.warn(() => `[Statistics] Storage snapshot failed: ${error.message}`);
+            return { type: storageType, healthy: false, caches: [] };
+        }
+    })();
+
+    try {
+        const value = await storageStatisticsCache.inFlight;
+        storageStatisticsCache.value = value;
+        storageStatisticsCache.expiresAt = Date.now() + (value.healthy ? 15_000 : 5_000);
+        return value;
+    } finally {
+        storageStatisticsCache.inFlight = null;
+    }
+}
+
+async function buildStatisticsSnapshot(config) {
+    const [{ history }, sessions, storage] = await Promise.all([
+        loadHistoryEntriesForPage(config),
+        sessionManager.getStats().catch(error => {
+            log.debug(() => `[Statistics] Session snapshot failed: ${error.message}`);
+            return {};
+        }),
+        collectStorageStatistics()
+    ]);
+
+    const uniqueTranslations = new Set(inFlightTranslations instanceof Map
+        ? [...inFlightTranslations.values()]
+        : []);
+    const snapshot = {
+        generatedAt: new Date().toISOString(),
+        version,
+        history: summarizeHistory(history),
+        runtime: getRuntimeMetrics(),
+        storage,
+        addon: {
+            activeTranslations: uniqueTranslations.size,
+            translationStatuses: translationStatus instanceof Map ? translationStatus.size : 0,
+            sessions,
+            translationCache: getTranslationCacheMetrics(),
+            downloadCache: getDownloadCacheStats(),
+            connections: getPoolStats()
+        }
+    };
+    snapshot.insights = buildInsights(snapshot);
+    return snapshot;
+}
+
+app.get('/statistics', async (req, res) => {
+    try {
+        let t = res.locals?.t || getTranslatorFromRequest(req, res);
+        const { config: configStr, videoId, filename } = req.query;
+        if (!configStr) {
+            return res.status(400).send(t('server.errors.missingConfig', {}, 'Missing config'));
+        }
+
+        const config = await resolveConfigGuarded(configStr, req, res, '[Statistics Page] config', t);
+        if (!config) return;
+        t = getTranslatorFromRequest(req, res, config);
+        ensureConfigHash(config, configStr);
+        setNoStore(res);
+
+        res.type('html').send(generateStatisticsPage(configStr, config, videoId, filename));
+    } catch (error) {
+        const t = res.locals?.t || getTranslatorFromRequest(req, res);
+        if (respondStorageUnavailable(res, error, '[Statistics Page]', t)) return;
+        log.error(() => ['[Statistics Page] Error:', error]);
+        res.status(500).send(t('server.errors.statisticsPageFailed', {}, 'Failed to load Statistics page'));
+    }
+});
+
+app.get('/api/statistics', statsLimiter, async (req, res) => {
+    try {
+        let t = res.locals?.t || getTranslatorFromRequest(req, res);
+        const { config: configStr } = req.query;
+        if (!configStr) {
+            return res.status(400).json({ error: t('server.errors.missingConfig', {}, 'Missing config') });
+        }
+
+        const config = await resolveConfigGuarded(configStr, req, res, '[Statistics API] config', t);
+        if (!config) return;
+        t = getTranslatorFromRequest(req, res, config);
+        const configHash = ensureConfigHash(config, configStr);
+        const historyUserHash = resolveHistoryUserHash(config);
+        const cacheKey = historyUserHash || configHash;
+        setNoStore(res);
+
+        let snapshot = cacheKey ? statisticsSnapshotCache.get(cacheKey) : null;
+        if (!snapshot) {
+            snapshot = await buildStatisticsSnapshot(config);
+            if (cacheKey) statisticsSnapshotCache.set(cacheKey, snapshot);
+        }
+        res.json(snapshot);
+    } catch (error) {
+        const t = res.locals?.t || getTranslatorFromRequest(req, res);
+        if (respondStorageUnavailable(res, error, '[Statistics API]', t)) return;
+        log.error(() => ['[Statistics API] Error:', error]);
+        res.status(500).json({ error: t('server.errors.statisticsFailed', {}, 'Failed to collect statistics') });
     }
 });
 
