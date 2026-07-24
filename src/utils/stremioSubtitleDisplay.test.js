@@ -34,7 +34,7 @@ test('Stremio learning and cached labels stay compact and descriptive', () => {
   });
   assert.equal(learn, '◇ Tanulás: latin-amerikai spanyol');
   assert.equal(buildCachedSubtitleLabel('xSync', 'magyar'), 'xSync ✓ magyar');
-  assert.equal(buildStremioNoticeLabel('toolbox', getTranslator('hu')), '🧰 Sub Toolbox');
+  assert.equal(buildStremioNoticeLabel('toolbox', getTranslator('hu')), '🧰 Felirat-eszköztár');
 });
 
 test('Stremio mobile actions are visibly distinct from streaming desktop actions', () => {

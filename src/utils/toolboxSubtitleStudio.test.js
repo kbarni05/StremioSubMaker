@@ -29,7 +29,7 @@ test('generated Toolbox inline scripts remain syntactically valid', () => {
   assert.match(html, /Források <span>angol<\/span>/);
   assert.match(html, /Célok <span>magyar<\/span>/);
   assert.match(html, /SRT-fájlok fordítása/);
-  assert.match(html, /A Toolbox az aktuális munkamenethez/);
+  assert.match(html, /Az eszköztár az aktuális munkamenethez/);
   const inlineScripts = [...html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi)]
     .map(match => match[1])
     .filter(Boolean);
