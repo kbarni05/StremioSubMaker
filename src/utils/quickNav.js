@@ -380,6 +380,11 @@ function renderQuickNav(links, activeKey, showRefreshButton = true, devMode = tr
         <span>${label('statistics', 'Statistics')}</span>
         ${activeKey === 'statistics' ? `<span class="pill">${label('youAreHere', 'You are here')}</span>` : ''}
       </a>
+      <a class="quick-nav-link${activeKey === 'diagnostics' ? ' active' : ''}" href="${links.diagnostics}">
+        <span>🩺</span>
+        <span>${label('diagnostics', 'Diagnostics')}</span>
+        ${activeKey === 'diagnostics' ? `<span class="pill">${label('youAreHere', 'You are here')}</span>` : ''}
+      </a>
       <a class="quick-nav-link${activeKey === 'configure' ? ' active' : ''}" href="${links.configure}">
         <span>🛠️</span>
         <span>${label('configure', 'Configure')}</span>

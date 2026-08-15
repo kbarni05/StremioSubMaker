@@ -6,6 +6,55 @@ All notable changes to this project will be documented in this file.
 
 No changes yet.
 
+## SubMaker v1.8.0
+
+**Operations Center:**
+
+- **New System Diagnostics page:** a single health score and eleven prioritized
+  checks cover storage, saved configuration, subtitle sources, AI providers,
+  language selection, recent translation success, rate limits, event-loop delay,
+  memory pressure, cache capacity, and Mobile Mode.
+
+- **Privacy-safe support bundle:** copy or download a structured JSON report for
+  troubleshooting. API keys, passwords, session tokens, prompts, and complete
+  configuration values are excluded by construction and covered by regression tests.
+
+- **Live but lightweight:** diagnostics reuse the bounded statistics snapshot,
+  refresh only while visible, time out safely, and offer 30/60-second or manual-only
+  refresh without adding provider API requests.
+
+**Configuration Experience:**
+
+- **Instant settings search:** find providers, Mobile Mode, cache options, and
+  advanced controls directly from the main page. Search is case- and
+  accent-insensitive, supports multiple terms, and expands only matching cards.
+
+- **Keyboard-first navigation:** press `Ctrl+K` (or `/` outside a form field) to
+  focus search, and `Escape` to clear it. The controls remain compact and touch
+  friendly on mobile.
+
+- **First-class diagnostics navigation:** the main configuration shortcuts and
+  every Toolbox/tool-page navigation drawer now link directly to Diagnostics while
+  preserving the current stream context.
+
+**Bug Fixes:**
+
+- **Fetch-only really means no AI required:** “Just Fetch Subtitles” profiles can
+  now be saved without a Gemini or other AI key. Language limits are still fully
+  validated.
+
+- **Secret-proof diagnostic schema:** runtime, activity, cache, and provider counts
+  are deliberately summarized before reaching the browser; raw configuration data
+  never enters the diagnostics page or support export.
+
+- **Responsive operations UI:** the score, summary cards, health checks, facts, and
+  report actions adapt from desktop to narrow mobile screens without horizontal
+  overflow and respect reduced-motion preferences.
+
+- **Complete English and Hungarian coverage:** all new navigation, search,
+  diagnostics, status, privacy, and error messages are localized and protected by
+  the existing full-interface translation guard.
+
 ## SubMaker v1.7.1
 
 **Complete Hungarian Interface:**

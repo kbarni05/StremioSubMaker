@@ -43,7 +43,7 @@ const fs = require('fs');
 const os = require('os');
 const { pipeline } = require('stream/promises');
 
-const { parseConfig, getDefaultConfig, buildManifest, normalizeConfig, getLanguageSelectionLimits, getDefaultProviderParameters, mergeProviderParameters, selectGeminiApiKey, getEffectiveGeminiModel } = require('./src/utils/config');
+const { parseConfig, getDefaultConfig, buildManifest, normalizeConfig, validateConfig, getLanguageSelectionLimits, getDefaultProviderParameters, mergeProviderParameters, selectGeminiApiKey, getEffectiveGeminiModel } = require('./src/utils/config');
 const { parseSRT, toSRT, sanitizeSubtitleText, srtPairToWebVTT, ensureSRTForTranslation, detectASSFormat } = require('./src/utils/subtitle');
 const { version } = require('./src/utils/version');
 const { redactToken } = require('./src/utils/security');
@@ -68,6 +68,8 @@ const { generateSubToolboxPage, generateEmbeddedSubtitlePage, generateAutoSubtit
 const { generateHistoryPage, renderHistoryContent } = require('./src/utils/historyPageGenerator');
 const { generateStatisticsPage } = require('./src/utils/statisticsPageGenerator');
 const { summarizeHistory, getRuntimeMetrics, buildInsights } = require('./src/utils/statisticsMetrics');
+const { generateDiagnosticsPage } = require('./src/utils/diagnosticsPageGenerator');
+const { buildDiagnosticReport } = require('./src/utils/diagnostics');
 const { generateSmdbPage } = require('./src/utils/smdbPageGenerator');
 const { generateConfigurePage } = require('./src/utils/configurePageGenerator');
 const smdbCache = require('./src/utils/smdbCache');
@@ -6250,6 +6252,62 @@ app.get('/api/statistics', statsLimiter, async (req, res) => {
         if (respondStorageUnavailable(res, error, '[Statistics API]', t)) return;
         log.error(() => ['[Statistics API] Error:', error]);
         res.status(500).json({ error: t('server.errors.statisticsFailed', {}, 'Failed to collect statistics') });
+    }
+});
+
+// System Diagnostics — privacy-safe support and reliability dashboard.
+app.get('/diagnostics', async (req, res) => {
+    try {
+        let t = res.locals?.t || getTranslatorFromRequest(req, res);
+        const { config: configStr, videoId, filename } = req.query;
+        if (!configStr) {
+            return res.status(400).send(t('server.errors.missingConfig', {}, 'Missing config'));
+        }
+
+        const config = await resolveConfigGuarded(configStr, req, res, '[Diagnostics Page] config', t);
+        if (!config) return;
+        t = getTranslatorFromRequest(req, res, config);
+        ensureConfigHash(config, configStr);
+        setNoStore(res);
+        res.type('html').send(generateDiagnosticsPage(configStr, config, videoId, filename));
+    } catch (error) {
+        const t = res.locals?.t || getTranslatorFromRequest(req, res);
+        if (respondStorageUnavailable(res, error, '[Diagnostics Page]', t)) return;
+        log.error(() => ['[Diagnostics Page] Error:', error]);
+        res.status(500).send(t('server.errors.diagnosticsPageFailed', {}, 'Failed to load Diagnostics page'));
+    }
+});
+
+app.get('/api/diagnostics', statsLimiter, async (req, res) => {
+    try {
+        let t = res.locals?.t || getTranslatorFromRequest(req, res);
+        const { config: configStr } = req.query;
+        if (!configStr) {
+            return res.status(400).json({ error: t('server.errors.missingConfig', {}, 'Missing config') });
+        }
+
+        const config = await resolveConfigGuarded(configStr, req, res, '[Diagnostics API] config', t);
+        if (!config) return;
+        const configHash = ensureConfigHash(config, configStr);
+        const historyUserHash = resolveHistoryUserHash(config);
+        const cacheKey = historyUserHash || configHash;
+        setNoStore(res);
+
+        let snapshot = cacheKey ? statisticsSnapshotCache.get(cacheKey) : null;
+        if (!snapshot) {
+            snapshot = await buildStatisticsSnapshot(config);
+            if (cacheKey) statisticsSnapshotCache.set(cacheKey, snapshot);
+        }
+        const validation = validateConfig(config);
+        res.json(buildDiagnosticReport(snapshot, config, {
+            version,
+            validation: { valid: validation.valid, errors: validation.errors || [] }
+        }));
+    } catch (error) {
+        const t = res.locals?.t || getTranslatorFromRequest(req, res);
+        if (respondStorageUnavailable(res, error, '[Diagnostics API]', t)) return;
+        log.error(() => ['[Diagnostics API] Error:', error]);
+        res.status(500).json({ error: t('server.errors.diagnosticsFailed', {}, 'Failed to collect diagnostics') });
     }
 });
 

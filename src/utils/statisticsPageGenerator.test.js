@@ -27,12 +27,14 @@ test('statistics page is localized, responsive, and includes safe live controls'
   });
 });
 
-test('configure page exposes top-level history and statistics shortcuts', () => {
+test('configure page exposes top-level history, statistics, and diagnostics shortcuts', () => {
   const main = fs.readFileSync(path.join(__dirname, '..', '..', 'public', 'partials', 'main.html'), 'utf8');
   const client = fs.readFileSync(path.join(__dirname, '..', '..', 'public', 'config.js'), 'utf8');
   assert.match(main, /id="activityQuickLinks"/);
   assert.match(main, /id="translationHistoryLauncher"/);
   assert.match(main, /id="statisticsLauncher"/);
+  assert.match(main, /id="diagnosticsLauncher"/);
   assert.match(client, /buildActivityUrl\('\/sub-history'/);
   assert.match(client, /buildActivityUrl\('\/statistics'/);
+  assert.match(client, /buildActivityUrl\('\/diagnostics'/);
 });

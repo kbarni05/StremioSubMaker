@@ -559,6 +559,10 @@ html[data-theme="blackhole"] .ui-lang-flag.active {
     background: linear-gradient(135deg, #6b65ff, #aa68e8);
 }
 
+.activity-quick-link.diagnostics .activity-quick-icon {
+    background: linear-gradient(135deg, #0f9f82, #34d399);
+}
+
 .activity-quick-link strong,
 .activity-quick-link small {
     display: block;
@@ -572,6 +576,115 @@ html[data-theme="blackhole"] .ui-lang-flag.active {
     margin-top: 0.16rem;
     color: var(--text-secondary);
     font-size: 0.72rem;
+}
+
+.config-search {
+    margin: 0.85rem 0 1.15rem;
+    padding: 0.9rem;
+    border: 1px solid var(--border);
+    border-radius: 15px;
+    background: color-mix(in srgb, var(--surface) 94%, transparent);
+    box-shadow: 0 8px 22px var(--shadow);
+}
+
+.config-search-label {
+    display: block;
+    margin-bottom: 0.42rem;
+    color: var(--text-primary);
+    font-size: 0.82rem;
+    font-weight: 750;
+}
+
+.config-search-control {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-height: 46px;
+    padding: 0 0.65rem;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface-light);
+    transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.config-search-control:focus-within {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(8, 164, 213, 0.13);
+}
+
+.config-search-icon {
+    color: var(--primary);
+    font-size: 1.35rem;
+    line-height: 1;
+}
+
+#configSearchInput {
+    flex: 1;
+    min-width: 0;
+    padding: 0.65rem 0;
+    border: 0;
+    outline: 0;
+    color: var(--text-primary);
+    background: transparent;
+    font: inherit;
+}
+
+#configSearchInput::placeholder {
+    color: var(--text-secondary);
+}
+
+.config-search-shortcut {
+    padding: 0.18rem 0.42rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-secondary);
+    background: var(--surface);
+    font-size: 0.7rem;
+    font-family: inherit;
+    white-space: nowrap;
+}
+
+.config-search-clear {
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border: 0;
+    border-radius: 8px;
+    color: var(--text-secondary);
+    background: transparent;
+    cursor: pointer;
+    font-size: 1.25rem;
+}
+
+.config-search-clear:hover,
+.config-search-clear:focus-visible {
+    color: var(--text-primary);
+    background: var(--surface);
+    outline: 1px solid var(--border);
+}
+
+.config-search-meta,
+.config-search-empty {
+    margin-top: 0.42rem;
+    color: var(--text-secondary);
+    font-size: 0.74rem;
+}
+
+.config-search-empty {
+    padding: 0.55rem 0.65rem;
+    border-radius: 9px;
+    color: #f59e0b;
+    background: rgba(245, 158, 11, 0.09);
+}
+
+.config-search-hidden {
+    display: none !important;
+}
+
+.card.config-search-match {
+    border-color: color-mix(in srgb, var(--primary) 62%, var(--border));
 }
 
 .logo {
@@ -3149,6 +3262,19 @@ html[data-theme="blackhole"] .save-state.is-dirty {
     }
 
     .activity-quick-link small {
+        display: none;
+    }
+
+    .activity-quick-link.diagnostics {
+        grid-column: 1 / -1;
+    }
+
+    .config-search {
+        margin-top: 0.65rem;
+        padding: 0.72rem;
+    }
+
+    .config-search-shortcut {
         display: none;
     }
 

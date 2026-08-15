@@ -33,6 +33,7 @@ function buildLinks(configStr, videoId, filename) {
     smdb: `/smdb${buildQuery(shared)}`,
     history: `/sub-history${buildQuery(shared)}`,
     statistics: `/statistics${buildQuery(shared)}`,
+    diagnostics: `/diagnostics${buildQuery(shared)}`,
     configure: `/configure${buildQuery({ config: configStr })}`
   };
 }

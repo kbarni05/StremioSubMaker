@@ -4,6 +4,25 @@ Common issues and solutions for SubMaker.
 
 ---
 
+## Start with System Diagnostics
+
+Open **System Diagnostics** from the main configuration shortcuts or any Toolbox
+navigation menu. Run the checks before changing settings: the page identifies
+invalid configuration, missing providers or languages, unavailable storage, recent
+translation failures and rate limits, high memory/cache pressure, and server event-
+loop delays.
+
+Use **Copy report** or **Download JSON** when asking for help. The support bundle is
+designed not to contain API keys, passwords, session tokens, custom prompts, or the
+complete saved configuration. It does include the SubMaker/Node version, platform,
+safe provider counts, selected-language counts, recent aggregate activity, and the
+failed checks needed for diagnosis.
+
+The diagnostic refresh never calls paid AI or subtitle-provider APIs; it reuses the
+same short-lived local snapshot as the Statistics page.
+
+---
+
 ## Translation Issues
 
 ### ❌ Translation Fails / Errors

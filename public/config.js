@@ -6241,6 +6241,7 @@ Translate to {target_language}.`;
         const nav = document.getElementById('activityQuickLinks');
         const historyLink = document.getElementById('translationHistoryLauncher');
         const statisticsLink = document.getElementById('statisticsLauncher');
+        const diagnosticsLink = document.getElementById('diagnosticsLauncher');
         if (!nav) return;
 
         const cfg = configRef && isValidConfigToken(configRef) ? configRef : '';
@@ -6249,6 +6250,7 @@ Translate to {target_language}.`;
         nav.setAttribute('aria-hidden', visible ? 'false' : 'true');
         if (historyLink) historyLink.href = visible ? buildActivityUrl('/sub-history', cfg) : '#';
         if (statisticsLink) statisticsLink.href = visible ? buildActivityUrl('/statistics', cfg) : '#';
+        if (diagnosticsLink) diagnosticsLink.href = visible ? buildActivityUrl('/diagnostics', cfg) : '#';
     }
 
     function getCachedConfigForToken(tokenToCheck) {
