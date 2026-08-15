@@ -36,6 +36,14 @@
                 <small data-i18n="config.activityNav.statisticsHint">Addon health and hardware metrics</small>
             </span>
         </a>
+        <a class="activity-quick-link diagnostics" id="diagnosticsLauncher" href="#" target="_blank"
+            rel="noopener noreferrer">
+            <span class="activity-quick-icon" aria-hidden="true">✓</span>
+            <span>
+                <strong data-i18n="config.activityNav.diagnostics">System diagnostics</strong>
+                <small data-i18n="config.activityNav.diagnosticsHint">Guided health checks and safe support report</small>
+            </span>
+        </a>
     </nav>
 
     <div id="alertContainer"></div>
@@ -155,6 +163,25 @@
             </div>
             <span class="qs-entry-arrow">→</span>
         </div>
+
+        <!-- Settings finder -->
+        <section class="config-search" role="search" aria-labelledby="configSearchLabel">
+            <label id="configSearchLabel" class="config-search-label" for="configSearchInput"
+                data-i18n="config.search.label">Find a setting</label>
+            <div class="config-search-control">
+                <span class="config-search-icon" aria-hidden="true">⌕</span>
+                <input id="configSearchInput" type="search" autocomplete="off" enterkeyhint="search"
+                    placeholder="Search providers, mobile mode, cache…" data-i18n="config.search.placeholder"
+                    data-i18n-attr="placeholder" aria-describedby="configSearchResults configSearchHint">
+                <kbd id="configSearchHint" class="config-search-shortcut">Ctrl K</kbd>
+                <button id="configSearchClear" class="config-search-clear" type="button" hidden
+                    data-i18n="config.search.clear" data-i18n-attr="aria-label,title" aria-label="Clear search"
+                    title="Clear search">×</button>
+            </div>
+            <div class="config-search-meta" id="configSearchResults" role="status" aria-live="polite"
+                data-i18n="config.search.ready">Search settings, providers and features</div>
+            <div class="config-search-empty" id="configSearchEmpty" hidden data-i18n="config.search.empty">No matching setting. Try a provider name or a shorter phrase.</div>
+        </section>
 
         <!-- No Translation Mode Toggle -->
         <div

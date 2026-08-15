@@ -1353,6 +1353,24 @@ function validateConfig(config) {
   }
 
   const { maxSourceLanguages, maxTargetLanguages, maxNoTranslationLanguages } = getLanguageSelectionLimits();
+
+  // Fetch-only mode intentionally does not use an AI provider. Validate and
+  // return before provider requirements so a keyless subtitle-fetch profile is
+  // accepted exactly as the UI promises.
+  if (config.noTranslationMode) {
+    if (!config.noTranslationLanguages || config.noTranslationLanguages.length === 0) {
+      errors.push(t('validation.noTranslationMissing', {}, 'At least one no-translation language must be selected'));
+    }
+    if (config.noTranslationLanguages && config.noTranslationLanguages.length > maxNoTranslationLanguages) {
+      errors.push(t('validation.noTranslationLimit', { limit: maxNoTranslationLanguages }, `Maximum of ${maxNoTranslationLanguages} no-translation languages allowed`));
+    }
+
+    return {
+      valid: errors.length === 0,
+      errors
+    };
+  }
+
   const multiEnabled = config.multiProviderEnabled === true;
   const mainProvider = String(multiEnabled ? (config.mainProvider || 'gemini') : 'gemini').toLowerCase();
   const resolveProviderConfig = (key) => {
@@ -1435,20 +1453,6 @@ function validateConfig(config) {
   // When secondary is enabled, ensure we truly have two configured providers (main + fallback)
   if (multiEnabled && config.secondaryProviderEnabled === true && configuredProviders.size < 2) {
     errors.push(t('validation.secondaryTwoProviders', {}, 'Secondary Provider requires two configured AI providers with API keys'));
-  }
-
-  if (config.noTranslationMode) {
-    if (!config.noTranslationLanguages || config.noTranslationLanguages.length === 0) {
-      errors.push(t('validation.noTranslationMissing', {}, 'At least one no-translation language must be selected'));
-    }
-    if (config.noTranslationLanguages && config.noTranslationLanguages.length > maxNoTranslationLanguages) {
-      errors.push(t('validation.noTranslationLimit', { limit: maxNoTranslationLanguages }, `Maximum of ${maxNoTranslationLanguages} no-translation languages allowed`));
-    }
-
-    return {
-      valid: errors.length === 0,
-      errors
-    };
   }
 
   if (!config.sourceLanguages || config.sourceLanguages.length === 0) {

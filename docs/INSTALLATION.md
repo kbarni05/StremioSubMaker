@@ -106,6 +106,11 @@ docker compose ps
 Confirm the deployment with `http://localhost:7001/health` and inspect
 `docker compose logs --tail=100 submaker` if it is not healthy.
 
+After opening a saved configuration, use its **System Diagnostics** shortcut for a
+deeper end-to-end check. Unlike `/health`, it also validates the user profile,
+provider/language readiness, recent translation reliability, runtime pressure, and
+cache utilization without exposing credentials or sending paid provider requests.
+
 ## Sync the GitHub fork with upstream
 
 Run this only from a clean `main` branch. It refuses a non-fast-forward merge, so

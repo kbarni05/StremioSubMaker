@@ -139,6 +139,7 @@ function generateFileTranslationPage(videoId, configStr, config, filename = '') 
     const configureLink = `/configure?config=${encodeURIComponent(configStr)}`;
     const historyLink = `/sub-history?config=${encodeURIComponent(configStr)}&videoId=${encodeURIComponent(videoId || '')}${fileParam}`;
     const statisticsLink = `/statistics?config=${encodeURIComponent(configStr)}&videoId=${encodeURIComponent(videoId || '')}${fileParam}`;
+    const diagnosticsLink = `/diagnostics?config=${encodeURIComponent(configStr)}&videoId=${encodeURIComponent(videoId || '')}${fileParam}`;
     const navLinks = {
         subToolbox: subToolboxLink,
         translateFiles: translateFilesLink,
@@ -148,7 +149,8 @@ function generateFileTranslationPage(videoId, configStr, config, filename = '') 
         smdb: `/smdb?config=${encodeURIComponent(configStr)}&videoId=${encodeURIComponent(videoId || '')}${fileParam}`,
         configure: configureLink,
         history: historyLink,
-        statistics: statisticsLink
+        statistics: statisticsLink,
+        diagnostics: diagnosticsLink
     };
     const t = getTranslator(config?.uiLanguage || 'en');
     const localeBootstrap = buildClientBootstrap(loadLocale(config?.uiLanguage || 'en'));

@@ -361,7 +361,8 @@ function buildToolLinks(configStr, videoId, filename) {
     smdb: `/smdb${buildQuery(withFile)}`,
     configure: `/configure${buildQuery({ config: configStr })}`,
     history: `/sub-history${buildQuery(historyParams)}`,
-    statistics: `/statistics${buildQuery(historyParams)}`
+    statistics: `/statistics${buildQuery(historyParams)}`,
+    diagnostics: `/diagnostics${buildQuery(historyParams)}`
   };
 }
 

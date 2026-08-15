@@ -36,6 +36,7 @@ const NON_CACHEABLE_PATH_PREFIXES = [
     '/auto-subtitles',
     '/file-upload',
     '/subtitle-sync',
+    '/diagnostics',
     '/addon/'
 ];
 const NON_CACHEABLE_ASSETS = new Set([
@@ -46,6 +47,7 @@ const NON_CACHEABLE_ASSETS = new Set([
     '/js/combobox.js',
     '/js/combobox-init.js',
     '/js/config-page-state.js',
+    '/js/config-search.js',
     '/js/config-loader.js',
     '/js/ui-widgets.js',
     '/js/theme-toggle.js',

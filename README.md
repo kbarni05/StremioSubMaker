@@ -54,6 +54,8 @@ Check their [FREE Stremio Addons Guide](https://stremio-addons-guide.elfhosted.c
 | **No-Translation Mode** | Just fetch subtitles without translation |
 | **Subtitle Studio** | Repair, shift, FPS-convert, rewrap, and safely search/replace SRT files locally |
 | **Statistics & Performance** | Translation success, speed, cache, storage, workload, and hardware health dashboard |
+| **System Diagnostics** | Guided health score, prioritized checks, and a privacy-safe support report |
+| **Settings Finder** | Accent-insensitive configuration search with `Ctrl+K` and mobile-friendly results |
 
 ---
 
@@ -90,6 +92,25 @@ snapshot visible if a refresh fails.
 
 The endpoint requires a valid configuration token and never returns provider API
 keys, Redis credentials, or the complete user configuration.
+
+---
+
+### 🩺 System Diagnostics
+
+Open **System Diagnostics** from the shortcuts below the SubMaker header or from
+any tool-page navigation menu. It combines eleven actionable checks into one health
+score covering configuration validity, subtitle and AI providers, selected
+languages, storage, recent translation reliability, rate limits, event-loop delay,
+memory pressure, cache utilization, and Mobile Mode.
+
+The page can copy or download a support report without exposing API keys,
+passwords, session tokens, custom prompts, or the full saved configuration. It
+reuses the short-lived statistics snapshot, so refreshing Diagnostics never sends
+test requests to paid translation providers.
+
+On the main configuration page, use the new settings finder to locate controls by
+name or description. Search ignores case and accents; press `Ctrl+K` or `/` to jump
+to it and `Escape` to clear the results.
 
 ---
 

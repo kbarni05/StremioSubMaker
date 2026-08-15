@@ -503,7 +503,8 @@ async function generateSubtitleSyncPage(subtitles, videoId, streamFilename, conf
         smdb: `/smdb?config=${encodeURIComponent(configStr || '')}&videoId=${encodeURIComponent(videoId || '')}&filename=${encodeURIComponent(streamFilename || '')}`,
         configure: `/configure?config=${encodeURIComponent(configStr || '')}`,
         history: `/sub-history?config=${encodeURIComponent(configStr || '')}&videoId=${encodeURIComponent(videoId || '')}&filename=${encodeURIComponent(streamFilename || '')}`,
-        statistics: `/statistics?config=${encodeURIComponent(configStr || '')}&videoId=${encodeURIComponent(videoId || '')}&filename=${encodeURIComponent(streamFilename || '')}`
+        statistics: `/statistics?config=${encodeURIComponent(configStr || '')}&videoId=${encodeURIComponent(videoId || '')}&filename=${encodeURIComponent(streamFilename || '')}`,
+        diagnostics: `/diagnostics?config=${encodeURIComponent(configStr || '')}&videoId=${encodeURIComponent(videoId || '')}&filename=${encodeURIComponent(streamFilename || '')}`
     };
     const devMode = (config || {}).devMode === true;
     const languageMaps = buildLanguageLookupMaps();
