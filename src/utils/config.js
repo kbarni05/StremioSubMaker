@@ -219,16 +219,22 @@ const GEMINI_31_FLASH_LITE_MODEL = 'gemini-3.1-flash-lite';
 const DEFAULT_GEMINI_MODEL = GEMINI_31_FLASH_LITE_MODEL;
 const GEMINI_MODEL_MIGRATIONS = Object.freeze({
   'gemini-3.1-flash-lite-preview': GEMINI_31_FLASH_LITE_MODEL,
-  'gemini-3-flash-preview': 'gemini-3.5-flash',
+  'gemini-2.5-flash-lite': GEMINI_31_FLASH_LITE_MODEL,
+  'gemini-2.5-flash-lite-preview-09-2025': GEMINI_31_FLASH_LITE_MODEL,
+  'gemini-2.5-flash-lite-09-2025': GEMINI_31_FLASH_LITE_MODEL,
+  'gemini-2.5-flash': 'gemini-3.6-flash',
+  'gemini-2.5-flash-preview-09-2025': 'gemini-3.6-flash',
+  'gemini-2.5-flash-latest': 'gemini-3.6-flash',
+  'gemini-2.5-pro': 'gemini-3.1-pro-preview',
+  'gemini-2.5-pro-preview-05-06': 'gemini-3.1-pro-preview',
+  'gemini-2.5-pro-latest': 'gemini-3.1-pro-preview',
+  'gemini-3-flash-preview': 'gemini-3.6-flash',
   'gemini-3-pro-preview': 'gemini-3.1-pro-preview',
-  'gemini-2.5-pro-preview-05-06': 'gemini-2.5-pro',
-  'gemini-2.5-flash-preview-09-2025': 'gemini-2.5-flash',
-  'gemini-2.5-flash-lite-preview-09-2025': 'gemini-2.5-flash-lite',
-  'gemini-2.5-flash-lite-09-2025': 'gemini-2.5-flash-lite'
+  'gemini-pro-latest': 'gemini-3.1-pro-preview'
 });
 
 function normalizeGeminiModelName(modelName) {
-  const normalized = typeof modelName === 'string' ? modelName.trim() : '';
+  const normalized = typeof modelName === 'string' ? modelName.trim().replace(/^models\//, '') : '';
   return GEMINI_MODEL_MIGRATIONS[normalized] || normalized;
 }
 
@@ -237,8 +243,7 @@ function normalizeGeminiModelName(modelName) {
  * This prevents old saved configs from using outdated or experimental models
  */
 const DEPRECATED_MODEL_NAMES = [
-  'gemini-2.0-flash-exp',
-  'gemini-pro-latest'
+  'gemini-2.0-flash-exp'
 ];
 
 /**
@@ -1103,21 +1108,25 @@ const MODEL_SPECIFIC_DEFAULTS = {
     thinkingBudget: 0,      // Gemma models don't support thinking
     temperature: 0.7        // Balanced temperature for Gemma
   },
-  'gemini-2.5-flash-lite': {
-    thinkingBudget: 0,      // No thinking for lite model
-    temperature: 0.8        // Higher temperature for creativity
-  },
-  'gemini-2.5-flash': {
-    thinkingBudget: -1,     // Dynamic thinking for flash model
-    temperature: 0.5        // Lower temperature for consistency
-  },
   'gemini-3.5-flash': {
-    thinkingBudget: 0,      // Mapped to low thinking for Gemini 3.x
-    temperature: 1          // Gemini 3.x uses model-default sampling
+    thinkingBudget: -1,
+    temperature: 0.5
+  },
+  'gemini-3.6-flash': {
+    thinkingBudget: -1,
+    temperature: 0.5
+  },
+  'gemini-3.7-flash': {
+    thinkingBudget: -1,
+    temperature: 0.5
+  },
+  'gemini-3.5-flash-lite': {
+    thinkingBudget: 0,
+    temperature: 0.8
   },
   'gemini-3.1-flash-lite': {
-    thinkingBudget: 0,      // Mapped to low thinking for Gemini 3.x
-    temperature: 1          // Gemini 3.x uses model-default sampling
+    thinkingBudget: 0,
+    temperature: 0.8
   },
   'gemini-flash-lite-latest': {
     thinkingBudget: 0,
@@ -1126,10 +1135,6 @@ const MODEL_SPECIFIC_DEFAULTS = {
   'gemini-flash-latest': {
     thinkingBudget: 0,
     temperature: 1
-  },
-  'gemini-2.5-pro': {
-    thinkingBudget: 1000,   // Fixed thinking budget for pro model
-    temperature: 0.5        // Lower temperature for consistency
   },
   'gemini-3.1-pro-preview': {
     thinkingBudget: 8192,   // Mapped to medium thinking for Gemini 3.x
@@ -1143,10 +1148,20 @@ const MODEL_SPECIFIC_DEFAULTS = {
  * @returns {Object} - Model-specific settings { thinkingBudget, temperature }
  */
 function getModelSpecificDefaults(modelName) {
-  return MODEL_SPECIFIC_DEFAULTS[normalizeGeminiModelName(modelName)] || {
-    thinkingBudget: 0,
-    temperature: 0.8
-  };
+  const normalized = normalizeGeminiModelName(modelName).toLowerCase();
+  if (MODEL_SPECIFIC_DEFAULTS[normalized]) {
+    return { ...MODEL_SPECIFIC_DEFAULTS[normalized] };
+  }
+  if (/^gemini-3(?:[.-]|$)/.test(normalized) && normalized.includes('flash-lite')) {
+    return { thinkingBudget: 0, temperature: 0.8 };
+  }
+  if (/^gemini-3(?:[.-]|$)/.test(normalized) && normalized.includes('flash')) {
+    return { thinkingBudget: -1, temperature: 0.5 };
+  }
+  if (/^gemini-3(?:[.-]|$)/.test(normalized) && normalized.includes('pro')) {
+    return { thinkingBudget: 8192, temperature: 1 };
+  }
+  return { thinkingBudget: 0, temperature: 0.8 };
 }
 
 function getEffectiveGeminiModel(config = {}) {
@@ -1705,6 +1720,7 @@ module.exports = {
   getDefaultProviderParameters,
   mergeProviderParameters,
   getEffectiveGeminiModel,
+  normalizeGeminiModelName,
   // Gemini key rotation
   selectGeminiApiKey,
   getMaxGeminiApiKeys,

@@ -989,36 +989,52 @@ Translate to {target_language}.`;
     const DEFAULT_GEMINI_MODEL = GEMINI_31_FLASH_LITE_MODEL;
     const GEMINI_MODEL_MIGRATIONS = Object.freeze({
         'gemini-3.1-flash-lite-preview': GEMINI_31_FLASH_LITE_MODEL,
-        'gemini-3-flash-preview': 'gemini-3.5-flash',
+        'gemini-2.5-flash-lite': GEMINI_31_FLASH_LITE_MODEL,
+        'gemini-2.5-flash-lite-preview-09-2025': GEMINI_31_FLASH_LITE_MODEL,
+        'gemini-2.5-flash-lite-09-2025': GEMINI_31_FLASH_LITE_MODEL,
+        'gemini-2.5-flash': 'gemini-3.6-flash',
+        'gemini-2.5-flash-preview-09-2025': 'gemini-3.6-flash',
+        'gemini-2.5-flash-latest': 'gemini-3.6-flash',
+        'gemini-2.5-pro': 'gemini-3.1-pro-preview',
+        'gemini-2.5-pro-preview-05-06': 'gemini-3.1-pro-preview',
+        'gemini-2.5-pro-latest': 'gemini-3.1-pro-preview',
+        'gemini-3-flash-preview': 'gemini-3.6-flash',
         'gemini-3-pro-preview': 'gemini-3.1-pro-preview',
-        'gemini-2.5-pro-preview-05-06': 'gemini-2.5-pro',
-        'gemini-2.5-flash-preview-09-2025': 'gemini-2.5-flash',
-        'gemini-2.5-flash-lite-preview-09-2025': 'gemini-2.5-flash-lite',
-        'gemini-2.5-flash-lite-09-2025': 'gemini-2.5-flash-lite'
+        'gemini-pro-latest': 'gemini-3.1-pro-preview'
     });
 
     function normalizeGeminiModelName(modelName) {
-        const normalized = typeof modelName === 'string' ? modelName.trim() : '';
+        const normalized = typeof modelName === 'string' ? modelName.trim().replace(/^models\//, '') : '';
         return GEMINI_MODEL_MIGRATIONS[normalized] || normalized;
+    }
+
+    function isDeprecatedGeminiModelName(modelName) {
+        const normalized = typeof modelName === 'string' ? modelName.trim().replace(/^models\//, '') : '';
+        return Object.prototype.hasOwnProperty.call(GEMINI_MODEL_MIGRATIONS, normalized)
+            || normalized === 'gemini-2.0-flash-exp';
     }
 
     const MODEL_SPECIFIC_DEFAULTS = {
 
-        'gemini-2.5-flash-lite': {
-            thinkingBudget: 0,
-            temperature: 0.7
-        },
-        'gemini-2.5-flash': {
+        'gemini-3.5-flash': {
             thinkingBudget: -1,
             temperature: 0.5
         },
-        'gemini-3.5-flash': {
+        'gemini-3.6-flash': {
+            thinkingBudget: -1,
+            temperature: 0.5
+        },
+        'gemini-3.7-flash': {
+            thinkingBudget: -1,
+            temperature: 0.5
+        },
+        'gemini-3.5-flash-lite': {
             thinkingBudget: 0,
-            temperature: 1
+            temperature: 0.8
         },
         'gemini-3.1-flash-lite': {
             thinkingBudget: 0,
-            temperature: 1
+            temperature: 0.8
         },
         'gemini-flash-lite-latest': {
             thinkingBudget: 0,
@@ -1027,10 +1043,6 @@ Translate to {target_language}.`;
         'gemini-flash-latest': {
             thinkingBudget: 0,
             temperature: 1
-        },
-        'gemini-2.5-pro': {
-            thinkingBudget: 1000,
-            temperature: 0.5
         },
         'gemini-3.1-pro-preview': {
             thinkingBudget: 8192,
@@ -1044,10 +1056,20 @@ Translate to {target_language}.`;
      * @returns {Object} - Model-specific settings { thinkingBudget, temperature }
      */
     function getModelSpecificDefaults(modelName) {
-        return MODEL_SPECIFIC_DEFAULTS[normalizeGeminiModelName(modelName)] || {
-            thinkingBudget: 0,
-            temperature: 0.8
-        };
+        const normalized = normalizeGeminiModelName(modelName).toLowerCase();
+        if (MODEL_SPECIFIC_DEFAULTS[normalized]) {
+            return { ...MODEL_SPECIFIC_DEFAULTS[normalized] };
+        }
+        if (/^gemini-3(?:[.-]|$)/.test(normalized) && normalized.includes('flash-lite')) {
+            return { thinkingBudget: 0, temperature: 0.8 };
+        }
+        if (/^gemini-3(?:[.-]|$)/.test(normalized) && normalized.includes('flash')) {
+            return { thinkingBudget: -1, temperature: 0.5 };
+        }
+        if (/^gemini-3(?:[.-]|$)/.test(normalized) && normalized.includes('pro')) {
+            return { thinkingBudget: 8192, temperature: 1 };
+        }
+        return { thinkingBudget: 0, temperature: 0.8 };
     }
 
     function getVisibleGeminiModelOptions() {
@@ -7748,14 +7770,20 @@ Translate to {target_language}.`;
             const apiKeyInput = document.getElementById(`provider-${key}-key`);
             if (apiKeyInput) {
                 apiKeyInput.addEventListener('blur', debounce(() => {
-                    if (document.getElementById(`provider-${key}-enabled`)?.checked) {
+                    if (key !== 'custom' && document.getElementById(`provider-${key}-enabled`)?.checked) {
                         fetchProviderModels(key, { silent: true });
                     }
                 }, 400));
             }
             const loadBtn = document.querySelector(`.provider-block[data-provider="${key}"] .validate-api-btn`);
             if (loadBtn) {
-                loadBtn.addEventListener('click', () => fetchProviderModels(key));
+                loadBtn.addEventListener('click', () => {
+                    if (key === 'custom') {
+                        validateCustomProviderConfiguration();
+                    } else {
+                        fetchProviderModels(key);
+                    }
+                });
             }
             const modelSelect = document.getElementById(`provider-${key}-model`);
             if (modelSelect) {
@@ -7764,6 +7792,19 @@ Translate to {target_language}.`;
                     currentConfig.providers[key].model = e.target.value;
                 });
             }
+        });
+
+        const customProviderInputs = [
+            document.getElementById('provider-custom-baseUrl'),
+            document.getElementById('provider-custom-key'),
+            document.getElementById('provider-custom-model')
+        ].filter(Boolean);
+        customProviderInputs.forEach(input => {
+            input.addEventListener('input', () => {
+                customProviderInputs.forEach(item => item.classList.remove('valid', 'invalid'));
+                document.getElementById('validateCustomProvider')?.classList.remove('success', 'error');
+                document.getElementById('customProviderValidationFeedback')?.classList.remove('show', 'success', 'error');
+            });
         });
 
         const mainProviderSelect = document.getElementById('mainProviderSelect');
@@ -7823,10 +7864,6 @@ Translate to {target_language}.`;
         const validateSubsRoBtn = document.getElementById('validateSubsRo');
         if (validateSubsRoBtn) {
             validateSubsRoBtn.addEventListener('click', () => validateApiKey('subsro'));
-        }
-        const validateCustomProviderBtn = document.getElementById('validateCustomProvider');
-        if (validateCustomProviderBtn) {
-            validateCustomProviderBtn.addEventListener('click', () => validateApiKey('custom'));
         }
 
         // File translation toggle - show modal when enabled
@@ -9205,7 +9242,7 @@ Translate to {target_language}.`;
             apiKey = document.getElementById('provider-custom-key')?.value.trim() || '';
             baseUrl = document.getElementById('provider-custom-baseUrl')?.value.trim() || '';
             model = document.getElementById('provider-custom-model')?.value.trim() || '';
-            endpoint = '/api/validate-custom';
+            endpoint = '/api/validate-custom-provider';
         }
 
         // Validate input
@@ -9237,6 +9274,11 @@ Translate to {target_language}.`;
         const iconEl = btn.querySelector('.validate-icon');
         const textEl = btn.querySelector('.validate-text');
         const originalIcon = iconEl.textContent;
+        const resetButtonText = provider === 'opensubtitles'
+            ? tConfig('config.validation.testCredentials', {}, 'Test Credentials')
+            : provider === 'custom'
+                ? tConfig('config.providersUi.customValidateCta', {}, 'Test connection')
+                : tConfig('config.validation.test', {}, 'Test');
         iconEl.textContent = '⟳';
         textEl.textContent = tConfig('config.validation.testing', {}, 'Testing...');
 
@@ -9295,9 +9337,7 @@ Translate to {target_language}.`;
                 setTimeout(() => {
                     btn.classList.remove('success');
                     iconEl.textContent = originalIcon;
-                    textEl.textContent = provider === 'opensubtitles'
-                        ? tConfig('config.validation.testCredentials', {}, 'Test Credentials')
-                        : tConfig('config.validation.test', {}, 'Test');
+                    textEl.textContent = resetButtonText;
                 }, 3000);
             } else {
                 // Error
@@ -9319,9 +9359,7 @@ Translate to {target_language}.`;
                 setTimeout(() => {
                     btn.classList.remove('error');
                     iconEl.textContent = originalIcon;
-                    textEl.textContent = provider === 'opensubtitles'
-                        ? tConfig('config.validation.testCredentials', {}, 'Test Credentials')
-                        : tConfig('config.validation.test', {}, 'Test');
+                    textEl.textContent = resetButtonText;
                 }, 4000);
             }
 
@@ -9346,9 +9384,13 @@ Translate to {target_language}.`;
             setTimeout(() => {
                 btn.classList.remove('error');
                 iconEl.textContent = originalIcon;
-                textEl.textContent = provider === 'opensubtitles' ? 'Test Credentials' : 'Test';
+                textEl.textContent = resetButtonText;
             }, 4000);
         }
+    }
+
+    function validateCustomProviderConfiguration() {
+        return validateApiKey('custom');
     }
 
     /**
@@ -9942,11 +9984,11 @@ Translate to {target_language}.`;
         const hardcodedModels = [
 
             { name: 'gemini-3.1-flash-lite', displayName: 'Gemini 3.1 Flash-Lite' },
+            { name: 'gemini-3.7-flash', displayName: 'Gemini 3.7 Flash (beta)' },
+            { name: 'gemini-3.6-flash', displayName: 'Gemini 3.6 Flash (beta)' },
             { name: 'gemini-3.5-flash', displayName: 'Gemini 3.5 Flash' },
-            { name: 'gemini-3.1-pro-preview', displayName: 'Gemini 3.1 Pro (preview)' },
-            { name: 'gemini-2.5-flash-lite', displayName: 'Gemini 2.5 Flash-Lite' },
-            { name: 'gemini-2.5-flash', displayName: 'Gemini 2.5 Flash' },
-            { name: 'gemini-2.5-pro', displayName: 'Gemini 2.5 Pro' }
+            { name: 'gemini-3.5-flash-lite', displayName: 'Gemini 3.5 Flash-Lite (beta)' },
+            { name: 'gemini-3.1-pro-preview', displayName: 'Gemini 3.1 Pro (preview)' }
         ];
 
         // Track added models to avoid duplicates
@@ -9968,7 +10010,7 @@ Translate to {target_language}.`;
 
         // Add API-fetched models (avoid duplicates)
         models.forEach(model => {
-            if (!addedModels.has(model.name)) {
+            if (!isDeprecatedGeminiModelName(model.name) && !addedModels.has(model.name)) {
                 const option = document.createElement('option');
                 option.value = model.name;
                 option.textContent = `${model.displayName}`;
