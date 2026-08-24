@@ -6,6 +6,46 @@ All notable changes to this project will be documented in this file.
 
 No changes yet.
 
+## SubMaker v1.8.1
+
+**Upstream v1.4.90 compatibility and performance:**
+
+- Upgraded the production runtime stack to Node.js 24 / npm 11.17 and the current
+  major releases of Express, dotenv, ioredis, rate-limit-redis, and gpt-tokenizer,
+  with Node 22 and 24 CI coverage and weekly dependency maintenance.
+- Redis startup no longer scans every alternate prefix when an explicit
+  `REDIS_KEY_PREFIX` is configured, invalid negative cache counters repair
+  themselves, and session readiness now returns a bounded retryable 503 instead
+  of leaving requests hanging.
+- Docker builds avoid a recursive ownership pass over the complete application,
+  reducing image-build work while retaining writable data/cache/log/key folders.
+- Localhost and private-LAN Stremio stream URLs retain the linked filename identity
+  across Toolbox, AutoSubs, Sync, and server-side hash generation, preventing false
+  video-hash mismatch warnings.
+
+**Bug Fixes:**
+
+- Added a localized **Test connection** control for custom OpenAI-compatible
+  providers. It validates the protected endpoint, credentials, model discovery,
+  and reports whether the selected model is listed without exposing the API key.
+- Gemini `AQ...` keys are covered end-to-end through the `v1beta` header-auth path;
+  key contents are preserved while unsafe control characters are removed.
+- OpenRouter is regression-tested as the true primary provider: Gemini fallback is
+  called only after a primary failure, avoiding unrelated Gemini 429 errors.
+- Provider subtitle JSON now identifies `forced` / foreign-parts-only, SDH, and
+  full tracks using explicit flags and common release-name markers. Responses expose
+  `forced`, `foreignPartsOnly`, `hearingImpaired`, and `trackType` metadata.
+
+**Reliability and quality:**
+
+- The service worker derives its initial cache version from its registered URL and
+  bounds the version lookup so an unavailable backend cannot stall activation.
+- Added regression coverage for Redis prefix migration and metrics, local/LAN stream
+  identity, Gemini authentication, provider priority, custom-provider validation,
+  and forced/full subtitle metadata.
+- English and Hungarian UI strings cover the new provider test, validation feedback,
+  initialization errors, and forced-track-related workflow without fallback text.
+
 ## SubMaker v1.8.0
 
 **Operations Center:**

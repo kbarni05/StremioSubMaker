@@ -1215,7 +1215,8 @@
                                 <div class="provider-block" data-provider="custom">
                                     <div
                                         style="display:flex; align-items:center; justify-content: space-between; gap:0.75rem;">
-                                        <label><input type="checkbox" id="provider-custom-enabled"> Custom Provider
+                                        <label><input type="checkbox" id="provider-custom-enabled"> <span
+                                                data-i18n="config.providersUi.customLabel">Custom Provider</span>
                                         </label>
                                     </div>
                                     <div id="provider-custom-fields" class="provider-fields"
@@ -1231,6 +1232,17 @@
                                             placeholder="e.g. llama3:8b, mistral:7b"
                                             data-i18n="config.providersUi.placeholders.customModel"
                                             data-i18n-attr="placeholder">
+                                        <div style="display:flex; flex-wrap:wrap; align-items:center; gap:0.6rem;">
+                                            <button type="button" class="validate-api-btn compact" id="validateCustomProvider"
+                                                title="Test custom provider connection"
+                                                data-i18n="config.providersUi.customValidateTitle" data-i18n-attr="title">
+                                                <span class="validate-icon">✓</span>
+                                                <span class="validate-text"
+                                                    data-i18n="config.providersUi.customValidateCta">Test connection</span>
+                                            </button>
+                                            <div class="validation-feedback" id="customProviderValidationFeedback"
+                                                style="margin:0; flex:1 1 14rem;"></div>
+                                        </div>
                                         <span class="label-description" data-i18n="config.providersUi.customHint">
                                             For Ollama, LM Studio, LocalAI, or any OpenAI-compatible API.
                                             Leave API key empty if not required.

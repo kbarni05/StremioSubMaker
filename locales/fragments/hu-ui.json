@@ -2,6 +2,7 @@
   "_comment": "A fő konfigurációs felület és a Stremio feliratmenü teljes magyar kiegészítése.",
   "lang": "hu",
   "messages": {
+    "server.errors.serviceInitializing": "A SubMaker még elindul. Próbáld újra néhány másodperc múlva.",
     "config.advancedGemini.batchContext.description": "Az eredeti környező szöveg és a korábbi fordítások hozzáadása a kötegek feldolgozásakor. Javíthatja a fordítás összefüggését, de hibás kimenetet okozhat és növeli a tokenhasználatot. Alapértelmezetten ki van kapcsolva.",
     "config.advancedGemini.batchContext.label": "Kötegkörnyezet engedélyezése",
     "config.advancedGemini.contextSize.description": "A környezetként hozzáadott szomszédos bejegyzések száma (1–10). Alapérték: 3",
@@ -185,6 +186,9 @@
     "config.providersUi.cfworkersHint": "Az azonosító külön megadásához használd az ACCOUNT|TOKEN formátumot.",
     "config.providersUi.cfworkersLoadModels": "A modellek betöltéséhez adj meg ACCOUNT_ID|TOKEN értéket",
     "config.providersUi.customHint": "Ollama, LM Studio, LocalAI vagy bármely OpenAI-kompatibilis API használatához. Ha nem szükséges, az API-kulcs üresen hagyható.",
+    "config.providersUi.customLabel": "Egyedi szolgáltató",
+    "config.providersUi.customValidateCta": "Kapcsolat tesztelése",
+    "config.providersUi.customValidateTitle": "Egyedi szolgáltató kapcsolatának tesztelése",
     "config.providersUi.deeplHint": "Az ingyenes kulcsok automatikusan az api-free.deepl.com címet használják. A nyelvkódokat a rendszer a választásaid alapján alakítja át.",
     "config.providersUi.googleHint": "A Google Fordító nyilvános webes végpontját használja, amely időnként instabil lehet.",
     "config.providersUi.googleWeb": "web (rögzített)",
@@ -219,6 +223,8 @@
     "config.validation.assemblyAiKeyInvalid": "Az AssemblyAI API-kulcs érvénytelen",
     "config.validation.assemblyAiKeyRequired": "AssemblyAI módban kötelező az AssemblyAI API-kulcs",
     "config.validation.cloudflareWorkersKeyFormat": "A Cloudflare Workers AI-kulcs formátuma ACCOUNT_ID|TOKEN legyen",
+    "config.validation.customBaseUrlRequired": "Add meg az egyedi szolgáltató alap URL-jét",
+    "config.validation.customModelRequired": "Add meg az egyedi szolgáltató modelljét",
     "config.validation.cloudflareWorkersKeyRequired": "Az automatikus feliratokhoz (xSync) Cloudflare Workers AI-kulcs szükséges",
     "config.validation.geminiKeysFillEmpty": "Új kulcs hozzáadása előtt tölts ki minden API-kulcs mezőt",
     "config.validation.geminiKeysRequired": "A kulcsforgatáshoz legalább egy API-kulcs szükséges",
@@ -1199,6 +1205,11 @@
     "diagnostics.value.on": "Be",
     "diagnostics.value.off": "Ki",
     "server.errors.diagnosticsPageFailed": "A Diagnosztika oldal betöltése sikertelen",
-    "server.errors.diagnosticsFailed": "A diagnosztikai adatok összegyűjtése sikertelen"
+    "server.errors.diagnosticsFailed": "A diagnosztikai adatok összegyűjtése sikertelen",
+    "server.errors.modelRequired": "Az egyedi szolgáltatóhoz modell szükséges",
+    "server.errors.customProviderBlocked": "Az egyedi szolgáltató URL-je érvénytelen vagy le van tiltva",
+    "server.errors.customProviderValidationFailed": "Az egyedi szolgáltató ellenőrzése sikertelen: {reason}",
+    "server.validation.customProviderValid": "A kapcsolat sikeres ({count} modell érkezett).",
+    "server.validation.customProviderValidModel": "A kapcsolat sikeres, és a(z) {model} modell elérhető."
   }
 }
