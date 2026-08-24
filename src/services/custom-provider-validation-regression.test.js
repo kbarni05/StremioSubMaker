@@ -6,38 +6,59 @@ const axios = require('axios');
 
 const OpenAICompatibleProvider = require('./providers/openaiCompatible');
 
-test('custom provider UI exposes a localized connection test wired to a protected endpoint', () => {
-  const root = path.join(__dirname, '..', '..');
-  const html = fs.readFileSync(path.join(root, 'public', 'partials', 'main.html'), 'utf8');
-  const client = fs.readFileSync(path.join(root, 'public', 'config.js'), 'utf8');
-  const server = fs.readFileSync(path.join(root, 'index.js'), 'utf8');
+const projectRoot = path.resolve(__dirname, '..', '..');
 
-  assert.match(html, /id="validateCustomProvider"/);
-  assert.match(html, /id="customProviderValidationFeedback"/);
-  assert.match(client, /validateApiKey\('custom'\)/);
-  assert.match(client, /endpoint = '\/api\/validate-custom'/);
-  assert.match(server, /app\.post\('\/api\/validate-custom', validationLimiter/);
-});
-
-test('custom provider validation can surface model endpoint failures', async () => {
-  const originalGet = axios.get;
-  axios.get = async () => {
-    const error = new Error('model endpoint rejected credentials');
-    error.response = { status: 401, data: { error: { message: 'invalid token' } } };
-    throw error;
+test('custom provider validation sends a minimal request with the entered URL, key, and model', async () => {
+  const originalPost = axios.post;
+  let request;
+  axios.post = async (url, body, options) => {
+    request = { url, body, options };
+    return { data: { choices: [{ message: { content: 'OK' } }] } };
   };
+
   try {
     const provider = new OpenAICompatibleProvider({
       providerName: 'custom',
-      baseUrl: 'https://example.com/v1',
-      apiKey: 'bad-key',
-      model: 'example-model'
+      baseUrl: 'https://llm.example.test/v1/',
+      apiKey: 'custom-secret-key',
+      model: 'local-model:latest',
+      temperature: 0,
+      topP: 1,
+      maxOutputTokens: 16,
+      translationTimeout: 15,
+      maxRetries: 0
     });
-    await assert.rejects(
-      provider.getAvailableModels({ throwOnError: true }),
-      /model endpoint rejected credentials/
-    );
+
+    assert.equal(await provider.validateConfiguration(), true);
+    assert.equal(request.url, 'https://llm.example.test/v1/chat/completions');
+    assert.equal(request.body.model, 'local-model:latest');
+    assert.equal(request.body.max_tokens, 16);
+    assert.equal(request.body.stream, false);
+    assert.match(request.body.messages[1].content, /Reply with exactly: OK/);
+    assert.equal(request.options.headers.Authorization, 'Bearer custom-secret-key');
+    assert.equal(request.options.timeout, 15000);
   } finally {
-    axios.get = originalGet;
+    axios.post = originalPost;
   }
+});
+
+test('custom provider test UI and endpoint retain server-side request protections', () => {
+  const serverSource = fs.readFileSync(path.join(projectRoot, 'index.js'), 'utf8');
+  const configSource = fs.readFileSync(path.join(projectRoot, 'public', 'config.js'), 'utf8');
+  const mainPartial = fs.readFileSync(path.join(projectRoot, 'public', 'partials', 'main.html'), 'utf8');
+
+  assert.match(mainPartial, /id="validateCustomProvider"/);
+  assert.match(mainPartial, /id="customProviderValidationFeedback"/);
+  assert.match(configSource, /validateCustomProviderConfiguration\(\)/);
+  assert.match(configSource, /endpoint = '\/api\/validate-custom-provider'/);
+  assert.match(configSource, /key !== 'custom'[\s\S]{0,180}fetchProviderModels/);
+
+  assert.match(serverSource, /app\.post\('\/api\/validate-custom-provider', validationLimiter/);
+  assert.match(serverSource, /validateCustomBaseUrl\(rawBaseUrl\)/);
+  assert.match(serverSource, /createProviderInstance\([\s\S]{0,160}'custom'/);
+  assert.match(serverSource, /maxOutputTokens: 16/);
+  assert.match(serverSource, /translationTimeout: 15/);
+  assert.match(serverSource, /await provider\.validateConfiguration\(\)/);
+  assert.match(serverSource, /setNoStore\(res\)/);
+  assert.doesNotMatch(serverSource, /app\.post\('\/api\/validate-custom',/);
 });

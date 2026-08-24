@@ -6,6 +6,39 @@ All notable changes to this project will be documented in this file.
 
 No changes yet.
 
+## SubMaker v1.8.2
+
+**Bug Fixes:**
+
+- Explicit Gemini API-key tests now bypass stale negative authentication cache
+  entries and always recheck Google's live `v1beta` models endpoint. A successful
+  check clears the obsolete failure, so newly provisioned `AQ.` keys are no longer
+  shown as invalid for up to ten minutes.
+- The custom OpenAI-compatible **Test connection** action now sends one tiny,
+  non-streaming request through the same server-side chat-completions path used by
+  real translations. It validates the URL, optional API key, and selected model
+  together instead of relying on an often-missing model-list endpoint.
+- Custom validation remains rate-limited, SSRF- and DNS-rebinding-protected, never
+  stores submitted credentials, rejects header/control-character injection, and
+  returns localized safe errors without exposing an upstream response or secret.
+
+**Current Gemini model support:**
+
+- Retired Gemini 2.5 and Gemini 3 Flash Preview choices were removed from new
+  configurations. Saved base and advanced selections migrate automatically to
+  Gemini 3.1 Flash-Lite, Gemini 3.6 Flash, or Gemini 3.1 Pro Preview as appropriate.
+- Added curated Gemini 3.5 Flash-Lite, 3.6 Flash, and 3.7 Flash choices, family-aware
+  defaults for newly discovered Gemini 3.x variants, and filtering that prevents
+  retired models from reappearing through live discovery.
+- Fixed duplicate custom-provider requests: leaving its key field no longer starts
+  implicit model discovery, and the connection button now has a single request path.
+
+**Quality:**
+
+- Added regression coverage for stale Gemini auth recovery, exact custom-provider
+  probe shape and protections, saved-model migration, current model choices, and
+  English/Hungarian interface coverage.
+
 ## SubMaker v1.8.1
 
 **Upstream v1.4.90 compatibility and performance:**

@@ -40,11 +40,12 @@ const modelLimitsInFlight = createBoundedCache({
 });
 
 const DEFAULT_MODELS = Object.freeze([
-  { name: 'gemini-3.5-flash', displayName: 'Gemini 3.5 Flash', description: 'Stable, high-quality Flash model' },
   { name: 'gemini-3.1-flash-lite', displayName: 'Gemini 3.1 Flash-Lite', description: 'Stable, fast and cost-efficient translation model' },
-  { name: 'gemini-2.5-flash', displayName: 'Gemini 2.5 Flash', description: 'Stable Flash model with configurable thinking' },
-  { name: 'gemini-2.5-flash-lite', displayName: 'Gemini 2.5 Flash-Lite', description: 'Stable lightweight Flash model' },
-  { name: 'gemini-2.5-pro', displayName: 'Gemini 2.5 Pro', description: 'Stable quality-focused model' },
+  { name: 'gemini-3.7-flash', displayName: 'Gemini 3.7 Flash', description: 'Current high-quality Flash model' },
+  { name: 'gemini-3.6-flash', displayName: 'Gemini 3.6 Flash', description: 'Current recommended Flash replacement' },
+  { name: 'gemini-3.5-flash', displayName: 'Gemini 3.5 Flash', description: 'High-quality Flash model' },
+  { name: 'gemini-3.5-flash-lite', displayName: 'Gemini 3.5 Flash-Lite', description: 'Fast lightweight Flash model' },
+  { name: 'gemini-3.1-pro-preview', displayName: 'Gemini 3.1 Pro Preview', description: 'Quality-focused Pro model' },
 ]);
 
 function clampNumber(value, fallback, min, max) {
@@ -201,14 +202,9 @@ class GeminiService {
    */
   async getAvailableModels(options = {}) {
     const silent = !!options.silent;
-    if (await hasCachedProviderAuthFailure(this.authFailureCacheKey)) {
+    const bypassAuthFailureCache = options.bypassAuthFailureCache === true;
+    if (!bypassAuthFailureCache && await hasCachedProviderAuthFailure(this.authFailureCacheKey)) {
       log.warn(() => '[Gemini] Fetch models blocked: cached invalid API key detected');
-      if (options.throwOnError === true) {
-        const error = new Error('Gemini API key is invalid or blocked');
-        error.statusCode = 401;
-        error.translationErrorType = '403';
-        throw error;
-      }
       return [];
     }
 

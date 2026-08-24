@@ -46,7 +46,7 @@ const { pipeline } = require('stream/promises');
 const { parseConfig, getDefaultConfig, buildManifest, normalizeConfig, validateConfig, getLanguageSelectionLimits, getDefaultProviderParameters, mergeProviderParameters, selectGeminiApiKey, getEffectiveGeminiModel } = require('./src/utils/config');
 const { parseSRT, toSRT, sanitizeSubtitleText, srtPairToWebVTT, ensureSRTForTranslation, detectASSFormat } = require('./src/utils/subtitle');
 const { version } = require('./src/utils/version');
-const { redactToken } = require('./src/utils/security');
+const { redactToken, sanitizeApiKeyForHeader } = require('./src/utils/security');
 const { getAllLanguages, getAllTranslationLanguages, getLanguageName, toISO6392, findISO6391ByName, canonicalSyncLanguageCode } = require('./src/utils/languages');
 const { generateCacheKeys } = require('./src/utils/cacheKeys');
 const { getCached: getDownloadCached, saveCached: saveDownloadCached, getCacheStats: getDownloadCacheStats } = require('./src/utils/downloadCache');
@@ -80,7 +80,6 @@ const { registerHealthRoutes } = require('./src/routes/healthRoutes');
 const { registerTranslationStatusRoutes } = require('./src/routes/translationStatusRoutes');
 const {
     getProviderAuthFailureCacheKey,
-    hasCachedProviderAuthFailure,
     cacheProviderAuthFailure,
     clearCachedProviderAuthFailure
 } = require('./src/utils/providerAuthFailureCache');
@@ -2194,7 +2193,7 @@ app.use((req, res, next) => {
         '/api/validate-wyzie',
         '/api/validate-opensubtitles',
         '/api/validate-subsro',
-        '/api/validate-custom',
+        '/api/validate-custom-provider',
         // Stream metadata endpoints for tool pages
         '/api/stream-activity',
         '/api/resolve-linked-title',
@@ -2462,7 +2461,7 @@ app.use((req, res, next) => {
         '/api/update-session',
         '/api/gemini-models',
         '/api/models',
-        '/api/validate-custom',
+        '/api/validate-custom-provider',
         '/api/validate-gemini',
         '/api/validate-subsource',
         '/api/validate-subdl',
@@ -3054,49 +3053,115 @@ app.post('/api/models/:provider', async (req, res) => {
     }
 });
 
-app.post('/api/validate-custom', validationLimiter, async (req, res) => {
+// Validate a custom OpenAI-compatible provider through the same server-side
+// request path used for real translations. The small probe checks the URL,
+// optional credentials, and selected model together without persisting them.
+app.post('/api/validate-custom-provider', validationLimiter, async (req, res) => {
     setNoStore(res);
     const t = res.locals?.t || getTranslatorFromRequest(req, res);
 
+    const rawBaseUrl = typeof req.body?.baseUrl === 'string' ? req.body.baseUrl.trim() : '';
+    const rawApiKey = typeof req.body?.apiKey === 'string' ? req.body.apiKey.trim() : '';
+    const rawModel = typeof req.body?.model === 'string' ? req.body.model.trim() : '';
+
+    if (!rawBaseUrl) {
+        return res.status(400).json({
+            valid: false,
+            error: t('server.errors.baseUrlRequired', {}, 'Base URL is required for custom provider')
+        });
+    }
+    if (!rawModel) {
+        return res.status(400).json({
+            valid: false,
+            error: t('server.errors.customProviderModelRequired', {}, 'Model is required for custom provider')
+        });
+    }
+    if (rawBaseUrl.length > 2048 || rawApiKey.length > 8192 || rawModel.length > 512) {
+        return res.status(400).json({
+            valid: false,
+            error: t('server.errors.customProviderFieldsTooLong', {}, 'Custom provider configuration contains an overlong field')
+        });
+    }
+    if (/[\x00-\x1F\x7F]/.test(rawModel)) {
+        return res.status(400).json({
+            valid: false,
+            error: t('server.errors.customProviderModelInvalid', {}, 'Custom provider model contains invalid characters')
+        });
+    }
+
+    const sanitizedApiKey = rawApiKey ? sanitizeApiKeyForHeader(rawApiKey) : '';
+    if (rawApiKey && sanitizedApiKey !== rawApiKey) {
+        return res.status(400).json({
+            valid: false,
+            error: t('server.errors.customProviderApiKeyInvalid', {}, 'Custom provider API key contains invalid characters')
+        });
+    }
+
     try {
-        const apiKey = String(req.body?.apiKey || '').trim();
-        const baseUrl = String(req.body?.baseUrl || '').trim();
-        const model = String(req.body?.model || '').trim();
-        if (!baseUrl) {
-            return res.status(400).json({ valid: false, error: t('server.errors.baseUrlRequired', {}, 'Base URL is required for custom provider') });
-        }
-        if (!model) {
-            return res.status(400).json({ valid: false, error: t('server.errors.modelRequired', {}, 'Model is required for custom provider') });
+        const { validateCustomBaseUrl } = require('./src/utils/ssrfProtection');
+        const baseUrlValidation = await validateCustomBaseUrl(rawBaseUrl);
+        if (!baseUrlValidation.valid) {
+            return res.status(400).json({ valid: false, error: baseUrlValidation.error });
         }
 
-        const provider = await createProviderInstance('custom', { apiKey, baseUrl, model }, {});
-        if (!provider || typeof provider.getAvailableModels !== 'function') {
-            return res.status(400).json({ valid: false, error: t('server.errors.customProviderBlocked', {}, 'The custom provider URL is invalid or blocked') });
+        const provider = await createProviderInstance(
+            'custom',
+            {
+                apiKey: sanitizedApiKey || '',
+                model: rawModel,
+                baseUrl: baseUrlValidation.sanitized
+            },
+            {
+                temperature: 0,
+                topP: 1,
+                maxOutputTokens: 16,
+                translationTimeout: 15,
+                maxRetries: 0
+            }
+        );
+
+        if (!provider || typeof provider.validateConfiguration !== 'function') {
+            return res.status(400).json({
+                valid: false,
+                error: t('server.errors.customProviderUnavailable', {}, 'Custom provider configuration could not be initialized')
+            });
         }
 
-        const models = await provider.getAvailableModels({ throwOnError: true });
-        const available = Array.isArray(models) ? models : [];
-        const modelFound = available.some(entry => String(entry?.name || '').toLowerCase() === model.toLowerCase());
+        await provider.validateConfiguration();
         return res.json({
             valid: true,
-            modelFound,
-            modelsCount: available.length,
-            message: modelFound
-                ? t('server.validation.customProviderValidModel', { model }, `Connection succeeded and model ${model} is available.`)
-                : t('server.validation.customProviderValid', { count: available.length }, `Connection succeeded (${available.length} models returned).`)
+            message: t('server.validation.customProviderValid', {}, 'Custom provider configuration is valid')
         });
     } catch (error) {
-        const status = Number(error?.response?.status || error?.statusCode || 0);
-        const upstreamMessage = error?.response?.data?.error?.message
-            || error?.response?.data?.message
-            || error?.message
-            || 'Connection failed';
-        log.warn(() => `[API] Custom provider validation failed (${status || 'network'}): ${upstreamMessage}`);
-        return res.status(status === 401 || status === 403 ? 401 : (status === 429 || status >= 500 ? 503 : 400)).json({
-            valid: false,
-            retryable: status === 429 || status >= 500,
-            error: t('server.errors.customProviderValidationFailed', { reason: upstreamMessage }, `Custom provider validation failed: ${upstreamMessage}`)
-        });
+        const upstream = error?.originalError || error;
+        const status = Number(upstream?.response?.status || error?.statusCode || 0);
+        const code = String(upstream?.code || error?.code || '').toUpperCase();
+        let message;
+
+        if (status === 401 || status === 403) {
+            message = t('server.errors.customProviderAuthFailed', {}, 'Authentication failed. Check the custom provider API key.');
+        } else if (status === 404) {
+            message = t('server.errors.customProviderNotFound', {}, 'The custom provider base URL or model was not found.');
+        } else if (status === 400 || status === 405 || status === 415 || status === 422) {
+            message = t('server.errors.customProviderRejected', {}, 'The provider rejected the test request. Check the base URL and model.');
+        } else if (status === 429) {
+            message = t('server.errors.customProviderRateLimited', {}, 'The custom provider is rate limiting requests. Try again later.');
+        } else if (status >= 500) {
+            message = t('server.errors.customProviderServerError', {}, 'The custom provider returned a server error.');
+        } else if (code === 'ECONNABORTED' || code === 'ETIMEDOUT') {
+            message = t('server.errors.customProviderTimeout', {}, 'The custom provider test timed out.');
+        } else if (code === 'ENOTFOUND') {
+            message = t('server.errors.customProviderDnsFailed', {}, 'The custom provider hostname could not be resolved.');
+        } else if (code === 'ECONNREFUSED' || code === 'ECONNRESET') {
+            message = t('server.errors.customProviderConnectionFailed', {}, 'Could not connect to the custom provider.');
+        } else if (code === 'ESSRF_INTERNAL_IP') {
+            message = t('server.errors.customProviderBlocked', {}, 'The custom provider endpoint was blocked by server security policy.');
+        } else {
+            message = t('server.errors.customProviderTestFailed', {}, 'Could not validate the custom provider configuration.');
+        }
+
+        log.warn(() => `[API] Custom provider validation failed (status=${status || 'none'}, code=${code || 'none'})`);
+        return res.json({ valid: false, error: message });
     }
 });
 
@@ -3370,17 +3435,13 @@ app.post('/api/validate-gemini', validationLimiter, async (req, res) => {
         }
 
         const geminiAuthFailureCacheKey = getProviderAuthFailureCacheKey('gemini', geminiApiKey);
-        if (await hasCachedProviderAuthFailure(geminiAuthFailureCacheKey)) {
-            return res.json({
-                valid: false,
-                error: t('server.errors.invalidApiKeyAuth', {}, 'Invalid API key - authentication failed'),
-                cached: true
-            });
-        }
-
         try {
             const gemini = new GeminiService(geminiApiKey, undefined, { translationTimeout: 10 });
-            const models = await gemini.getAvailableModels({ silent: true, throwOnError: true });
+            const models = await gemini.getAvailableModels({
+                silent: true,
+                throwOnError: true,
+                bypassAuthFailureCache: true
+            });
 
             await clearCachedProviderAuthFailure(geminiAuthFailureCacheKey);
             res.json({

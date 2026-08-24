@@ -688,6 +688,43 @@ class OpenAICompatibleProvider {
     return requestIssue && mentionsStructuredMode;
   }
 
+  /**
+   * Send a deliberately small request through the same OpenAI-compatible path
+   * used by translations. This validates the URL, credentials, and model
+   * together without storing any submitted secret.
+   */
+  async validateConfiguration() {
+    const { body, url, isCfRun, useResponsesApi } = this.buildChatRequest(
+      'Reply with exactly: OK',
+      false,
+      { disableStructuredOutput: true }
+    );
+    const agents = this.getHttpAgents();
+    const response = await axios.post(url, body, {
+      headers: this.getAuthHeaders(),
+      timeout: this.translationTimeout,
+      httpAgent: agents.httpAgent,
+      httpsAgent: agents.httpsAgent
+    });
+
+    const text = isCfRun
+      ? (
+        response.data?.result?.translated_text ||
+        response.data?.result?.output ||
+        response.data?.result?.response ||
+        response.data?.result
+      )
+      : useResponsesApi
+        ? this.extractResponsesText(response.data)
+        : response.data?.choices?.[0]?.message?.content;
+
+    if (typeof text !== 'string' || !text.trim()) {
+      throw new Error('Provider returned an empty test response');
+    }
+
+    return true;
+  }
+
   async translateSubtitle(subtitleContent, sourceLanguage, targetLanguage, customPrompt = null, requestOptions = {}) {
     const { userPrompt } = this.buildUserPrompt(subtitleContent, targetLanguage, customPrompt);
 
