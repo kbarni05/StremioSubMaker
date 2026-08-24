@@ -38,7 +38,7 @@ const { StorageFactory, StorageAdapter } = require('../storage');
 const { getCached: getDownloadCached, saveCached: saveDownloadCached } = require('../utils/downloadCache');
 const log = require('../utils/logger');
 const { handleCaughtError } = require('../utils/errorClassifier');
-const { isHearingImpairedSubtitle } = require('../utils/subtitleFlags');
+const { isHearingImpairedSubtitle, getSubtitleTrackMetadata } = require('../utils/subtitleFlags');
 const { generateCacheKeys } = require('../utils/cacheKeys');
 const { createRunningStatus, updateTranslationJobStatus } = require('../utils/translationJobStatus');
 const { deduplicateSubtitles, logDeduplicationStats } = require('../utils/subtitleDeduplication');
@@ -3251,10 +3251,16 @@ function createSubtitleHandler(config) {
             ? getLocalizedLanguageName('spn', uiLanguage, 'Spanish (Latin America)')
             : sub.languageCode;
 
+          const trackMetadata = getSubtitleTrackMetadata(sub);
           const subtitle = {
             id: `${sub.fileId}`,
             lang: displayLang,
-            url: `{{ADDON_URL}}/${subtitleRouteBase}/${toPathSegment(sub.fileId)}/${toPathSegment(sub.languageCode)}${urlExtension}`
+            url: `{{ADDON_URL}}/${subtitleRouteBase}/${toPathSegment(sub.fileId)}/${toPathSegment(sub.languageCode)}${urlExtension}`,
+            name: String(sub.name || sub.fileName || sub.filename || '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, 180),
+            forced: trackMetadata.forced,
+            foreignPartsOnly: trackMetadata.foreignPartsOnly,
+            hearingImpaired: trackMetadata.hearingImpaired,
+            trackType: trackMetadata.trackType
           };
 
           return subtitle;

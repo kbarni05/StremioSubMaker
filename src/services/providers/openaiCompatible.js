@@ -570,7 +570,7 @@ class OpenAICompatibleProvider {
     return cleaned.slice(0, 2) || 'en';
   }
 
-  async getAvailableModels() {
+  async getAvailableModels(options = {}) {
     if (this.shouldUseAuthFailureCache() && await hasCachedProviderAuthFailure(this.authFailureCacheKey)) {
       log.warn(() => `[${this.providerName}] Fetch models blocked: cached invalid API key detected`);
       return [];
@@ -661,7 +661,7 @@ class OpenAICompatibleProvider {
         await cacheProviderAuthFailure(this.authFailureCacheKey);
       }
       logApiError(error, this.providerName, 'Fetch models', { skipResponseData: true });
-      if (this.providerName === 'cfWorkers') {
+      if (this.providerName === 'cfWorkers' || options.throwOnError === true) {
         throw error;
       }
       return [];

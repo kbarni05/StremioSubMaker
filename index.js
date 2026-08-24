@@ -1,5 +1,5 @@
 // Load environment variables from .env file FIRST (before anything else)
-require('dotenv').config();
+require('dotenv').config({ quiet: true });
 
 // Load logger utility first to intercept all console methods with timestamps
 const log = require('./src/utils/logger');
@@ -74,6 +74,7 @@ const { generateSmdbPage } = require('./src/utils/smdbPageGenerator');
 const { generateConfigurePage } = require('./src/utils/configurePageGenerator');
 const smdbCache = require('./src/utils/smdbCache');
 const { deriveVideoHash } = require('./src/utils/videoHash');
+const { deriveStreamHashFromUrl } = require('./src/utils/streamUrlIdentity');
 const { registerFileUploadRoutes } = require('./src/routes/fileUploadRoutes');
 const { registerHealthRoutes } = require('./src/routes/healthRoutes');
 const { registerTranslationStatusRoutes } = require('./src/routes/translationStatusRoutes');
@@ -398,73 +399,7 @@ function cleanupCachesOnStartup() {
 }
 
 function deriveStreamHashFromUrlServer(streamUrl, fallback = {}) {
-    let filename = (fallback.filename || fallback.streamFilename || '').trim();
-    let streamVideoId = (fallback.videoId || '').trim();
-    if (streamUrl) {
-        try {
-            const url = new URL(streamUrl);
-            // First, check for explicit filename-type params (these are reliable)
-            const explicitParams = ['filename', 'file', 'download', 'dn'];
-            let foundFilename = '';
-            for (const key of explicitParams) {
-                const val = url.searchParams.get(key);
-                if (val && val.trim()) {
-                    foundFilename = decodeURIComponent(val.trim().split('/').pop());
-                    break;
-                }
-            }
-            // Next, check pathname for a real filename (has extension)
-            if (!foundFilename) {
-                const parts = (url.pathname || '').split('/').filter(Boolean);
-                if (parts.length) {
-                    const lastPart = decodeURIComponent(parts[parts.length - 1]);
-                    // If it looks like a real filename (has extension), use it
-                    if (/\.[a-z0-9]{2,5}$/i.test(lastPart)) {
-                        foundFilename = lastPart;
-                    }
-                }
-            }
-            // Then check 'name' param as fallback (often just title, not filename)
-            if (!foundFilename) {
-                const nameVal = url.searchParams.get('name');
-                if (nameVal && nameVal.trim()) {
-                    foundFilename = decodeURIComponent(nameVal.trim().split('/').pop());
-                }
-            }
-            // Last resort: use pathname last part even without extension
-            if (!foundFilename) {
-                const parts = (url.pathname || '').split('/').filter(Boolean);
-                if (parts.length) {
-                    foundFilename = decodeURIComponent(parts[parts.length - 1]);
-                }
-            }
-            if (foundFilename) {
-                filename = foundFilename;
-            }
-            const idKeys = ['videoId', 'video', 'id', 'mediaid', 'imdb', 'tmdb', 'kitsu', 'anidb', 'mal', 'myanimelist', 'anilist', 'tvdb', 'simkl', 'livechart', 'anisearch'];
-            for (const key of idKeys) {
-                const val = url.searchParams.get(key);
-                if (val && val.trim()) {
-                    streamVideoId = val.trim();
-                    break;
-                }
-            }
-            if (!streamVideoId) {
-                const parts = (url.pathname || '').split('/').filter(Boolean);
-                const directId = parts.find((p) => /^tt\d+/i.test(p) || p.includes(':'));
-                if (directId) streamVideoId = directId.trim();
-            }
-        } catch (_) {
-            /* ignore parse errors */
-        }
-    }
-    const hash = deriveVideoHash(filename, streamVideoId);
-    return {
-        hash,
-        filename,
-        videoId: streamVideoId,
-        source: 'stream-url'
-    };
+    return deriveStreamHashFromUrl(streamUrl, fallback);
 }
 
 
@@ -2259,6 +2194,7 @@ app.use((req, res, next) => {
         '/api/validate-wyzie',
         '/api/validate-opensubtitles',
         '/api/validate-subsro',
+        '/api/validate-custom',
         // Stream metadata endpoints for tool pages
         '/api/stream-activity',
         '/api/resolve-linked-title',
@@ -2526,6 +2462,7 @@ app.use((req, res, next) => {
         '/api/update-session',
         '/api/gemini-models',
         '/api/models',
+        '/api/validate-custom',
         '/api/validate-gemini',
         '/api/validate-subsource',
         '/api/validate-subdl',
@@ -2620,6 +2557,26 @@ sessionManager.waitUntilReady().then(() => {
     sessionManagerReady = true;
 });
 
+const SESSION_READINESS_REQUEST_TIMEOUT_MS = (() => {
+    const parsed = parseInt(process.env.SESSION_READINESS_REQUEST_TIMEOUT_MS || '5000', 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 5000;
+})();
+
+function waitForSessionReadinessRequest() {
+    let timeoutId;
+    const timeout = new Promise((_, reject) => {
+        timeoutId = setTimeout(() => {
+            const error = new Error(`Session manager readiness timed out after ${SESSION_READINESS_REQUEST_TIMEOUT_MS}ms`);
+            error.code = 'SESSION_READINESS_TIMEOUT';
+            reject(error);
+        }, SESSION_READINESS_REQUEST_TIMEOUT_MS);
+        timeoutId.unref?.();
+    });
+
+    return Promise.race([sessionManager.waitUntilReady(), timeout])
+        .finally(() => clearTimeout(timeoutId));
+}
+
 // Middleware: Wait for session manager to be ready (for production use)
 // Skip for localhost to allow local testing without session persistence
 if (process.env.FORCE_SESSION_READY !== 'false') {
@@ -2639,9 +2596,18 @@ if (process.env.FORCE_SESSION_READY !== 'false') {
         // For other routes, ensure sessions are ready
         if (!sessionManagerReady) {
             try {
-                await sessionManager.waitUntilReady();
+                await waitForSessionReadinessRequest();
                 sessionManagerReady = true;
             } catch (err) {
+                if (err?.code === 'SESSION_READINESS_TIMEOUT') {
+                    const t = res.locals?.t || getTranslatorFromRequest(req, res);
+                    setNoStore(res);
+                    res.setHeader('Retry-After', '5');
+                    return res.status(503).json({
+                        error: t('server.errors.serviceInitializing', {}, 'SubMaker is still initializing. Please retry shortly.'),
+                        retryable: true
+                    });
+                }
                 log.error(() => ['[SessionReadiness] Failed to wait for session manager:', err.message]);
                 sessionManagerReady = true;
             }
@@ -3085,6 +3051,52 @@ app.post('/api/models/:provider', async (req, res) => {
         const message = error?.response?.data?.error || error?.response?.data?.message || error.message || 'Failed to fetch models';
         const t = res.locals?.t || getTranslatorFromRequest(req, res);
         res.status(500).json({ error: t('server.errors.modelsFailed', { reason: message }, message) });
+    }
+});
+
+app.post('/api/validate-custom', validationLimiter, async (req, res) => {
+    setNoStore(res);
+    const t = res.locals?.t || getTranslatorFromRequest(req, res);
+
+    try {
+        const apiKey = String(req.body?.apiKey || '').trim();
+        const baseUrl = String(req.body?.baseUrl || '').trim();
+        const model = String(req.body?.model || '').trim();
+        if (!baseUrl) {
+            return res.status(400).json({ valid: false, error: t('server.errors.baseUrlRequired', {}, 'Base URL is required for custom provider') });
+        }
+        if (!model) {
+            return res.status(400).json({ valid: false, error: t('server.errors.modelRequired', {}, 'Model is required for custom provider') });
+        }
+
+        const provider = await createProviderInstance('custom', { apiKey, baseUrl, model }, {});
+        if (!provider || typeof provider.getAvailableModels !== 'function') {
+            return res.status(400).json({ valid: false, error: t('server.errors.customProviderBlocked', {}, 'The custom provider URL is invalid or blocked') });
+        }
+
+        const models = await provider.getAvailableModels({ throwOnError: true });
+        const available = Array.isArray(models) ? models : [];
+        const modelFound = available.some(entry => String(entry?.name || '').toLowerCase() === model.toLowerCase());
+        return res.json({
+            valid: true,
+            modelFound,
+            modelsCount: available.length,
+            message: modelFound
+                ? t('server.validation.customProviderValidModel', { model }, `Connection succeeded and model ${model} is available.`)
+                : t('server.validation.customProviderValid', { count: available.length }, `Connection succeeded (${available.length} models returned).`)
+        });
+    } catch (error) {
+        const status = Number(error?.response?.status || error?.statusCode || 0);
+        const upstreamMessage = error?.response?.data?.error?.message
+            || error?.response?.data?.message
+            || error?.message
+            || 'Connection failed';
+        log.warn(() => `[API] Custom provider validation failed (${status || 'network'}): ${upstreamMessage}`);
+        return res.status(status === 401 || status === 403 ? 401 : (status === 429 || status >= 500 ? 503 : 400)).json({
+            valid: false,
+            retryable: status === 429 || status >= 500,
+            error: t('server.errors.customProviderValidationFailed', { reason: upstreamMessage }, `Custom provider validation failed: ${upstreamMessage}`)
+        });
     }
 });
 

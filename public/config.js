@@ -7824,6 +7824,10 @@ Translate to {target_language}.`;
         if (validateSubsRoBtn) {
             validateSubsRoBtn.addEventListener('click', () => validateApiKey('subsro'));
         }
+        const validateCustomProviderBtn = document.getElementById('validateCustomProvider');
+        if (validateCustomProviderBtn) {
+            validateCustomProviderBtn.addEventListener('click', () => validateApiKey('custom'));
+        }
 
         // File translation toggle - show modal when enabled
         const toolboxToggle = document.getElementById('subToolboxEnabled');
@@ -9150,7 +9154,7 @@ Translate to {target_language}.`;
      */
     async function validateApiKey(provider) {
         // Get elements based on provider
-        let btn, feedback, apiKey, username, password, endpoint;
+        let btn, feedback, apiKey, username, password, endpoint, baseUrl, model;
 
         if (provider === 'subsource') {
             btn = document.getElementById('validateSubSource');
@@ -9195,12 +9199,28 @@ Translate to {target_language}.`;
             feedback = document.getElementById('subsroValidationFeedback');
             apiKey = document.getElementById('subsroApiKey').value.trim();
             endpoint = '/api/validate-subsro';
+        } else if (provider === 'custom') {
+            btn = document.getElementById('validateCustomProvider');
+            feedback = document.getElementById('customProviderValidationFeedback');
+            apiKey = document.getElementById('provider-custom-key')?.value.trim() || '';
+            baseUrl = document.getElementById('provider-custom-baseUrl')?.value.trim() || '';
+            model = document.getElementById('provider-custom-model')?.value.trim() || '';
+            endpoint = '/api/validate-custom';
         }
 
         // Validate input
         if (provider === 'opensubtitles') {
             if (!username || !password) {
                 showValidationFeedback(feedback, 'error', tConfig('config.validation.credentialsRequired', {}, 'Please enter both username and password'));
+                return;
+            }
+        } else if (provider === 'custom') {
+            if (!baseUrl) {
+                showValidationFeedback(feedback, 'error', tConfig('config.validation.customBaseUrlRequired', {}, 'Please enter the custom provider base URL'));
+                return;
+            }
+            if (!model) {
+                showValidationFeedback(feedback, 'error', tConfig('config.validation.customModelRequired', {}, 'Please enter the custom provider model'));
                 return;
             }
         } else {
@@ -9233,7 +9253,7 @@ Translate to {target_language}.`;
             // Call validation endpoint
             const body = provider === 'opensubtitles'
                 ? { username, password }
-                : { apiKey };
+                : (provider === 'custom' ? { apiKey, baseUrl, model } : { apiKey });
 
             const response = await fetch(endpoint, {
                 method: 'POST',

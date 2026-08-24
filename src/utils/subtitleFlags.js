@@ -27,8 +27,45 @@ function inferHearingImpairedFromName(name) {
   return false;
 }
 
+function inferForcedFromName(name) {
+  if (!name) return false;
+  const s = String(name).toLowerCase();
+  return (
+    /(^|[\s._\-\[(])forced($|[\s._\-\])])/.test(s) ||
+    /foreign[\s._-]*parts?/.test(s) ||
+    /signs?[\s._&+-]*(and|&)?[\s._&+-]*songs?/.test(s)
+  );
+}
+
+function isForcedSubtitle(sub) {
+  if (!sub) return false;
+  return (
+    isTrueishFlag(sub.forced) ||
+    isTrueishFlag(sub.isForced) ||
+    isTrueishFlag(sub.foreign_parts_only) ||
+    isTrueishFlag(sub.foreignPartsOnly) ||
+    isTrueishFlag(sub.foreignParts) ||
+    inferForcedFromName(sub.name || sub.fileName || sub.filename || sub.release)
+  );
+}
+
+function getSubtitleTrackMetadata(sub) {
+  const forced = isForcedSubtitle(sub);
+  const hearingImpaired = isHearingImpairedSubtitle(sub)
+    || inferHearingImpairedFromName(sub?.name || sub?.fileName || sub?.filename || sub?.release);
+  return {
+    forced,
+    foreignPartsOnly: forced,
+    hearingImpaired,
+    trackType: forced ? 'forced' : (hearingImpaired ? 'sdh' : 'full')
+  };
+}
+
 module.exports = {
   isTrueishFlag,
   isHearingImpairedSubtitle,
-  inferHearingImpairedFromName
+  inferHearingImpairedFromName,
+  inferForcedFromName,
+  isForcedSubtitle,
+  getSubtitleTrackMetadata
 };

@@ -7,9 +7,10 @@ RUN apk add --no-cache su-exec tzdata
 # Set working directory
 WORKDIR /app
 
-# Install dependencies first (for better caching)
-COPY package*.json ./
-RUN npm ci --only=production
+# Install dependencies first. Keep the reviewed lifecycle-script policy in the
+# dependency layer and use the current production-only npm flag.
+COPY package*.json .npmrc ./
+RUN npm ci --omit=dev
 
 # Copy application code
 COPY . .
@@ -23,10 +24,10 @@ RUN mkdir -p .cache/translations \
     logs \
     keys
 
-# Set permissions: node owns everything, data dirs are world-writable (777)
-# so containers running with arbitrary UIDs can write to them via named volumes.
-# For bind mounts, the entrypoint handles ownership automatically.
-RUN chown -R node:node /app && \
+# Application files and node_modules stay read-only at runtime. Avoiding a
+# recursive chown of the dependency tree materially speeds up multi-arch builds.
+RUN chown node:node /app && \
+    chown -R node:node .cache data logs keys && \
     chmod 777 .cache data logs keys
 
 # Copy entrypoint script

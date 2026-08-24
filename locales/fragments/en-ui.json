@@ -2,6 +2,12 @@
   "_comment": "Additional Stremio subtitle display strings introduced in v1.5.3.",
   "lang": "en",
   "messages": {
+    "server.errors.serviceInitializing": "SubMaker is still initializing. Please retry shortly.",
+    "config.providersUi.customLabel": "Custom provider",
+    "config.providersUi.customValidateCta": "Test connection",
+    "config.providersUi.customValidateTitle": "Test custom provider connection",
+    "config.validation.customBaseUrlRequired": "Enter the custom provider base URL",
+    "config.validation.customModelRequired": "Enter the custom provider model",
     "config.otherSettings.mobileMode.label": "Mobile Mode (complete delivery)",
     "config.otherSettings.mobileMode.description": "Waits for the complete translation before responding to Stremio on Android/iOS. Duplicate requests share the same job, and reopening the stream receives a fresh URL after completion.",
     "config.otherSettings.mobileMode.timeoutLabel": "Maximum wait",
@@ -265,6 +271,11 @@
     "diagnostics.value.on": "On",
     "diagnostics.value.off": "Off",
     "server.errors.diagnosticsPageFailed": "Failed to load Diagnostics page",
-    "server.errors.diagnosticsFailed": "Failed to collect diagnostics"
+    "server.errors.diagnosticsFailed": "Failed to collect diagnostics",
+    "server.errors.modelRequired": "Model is required for custom provider",
+    "server.errors.customProviderBlocked": "The custom provider URL is invalid or blocked",
+    "server.errors.customProviderValidationFailed": "Custom provider validation failed: {reason}",
+    "server.validation.customProviderValid": "Connection succeeded ({count} models returned).",
+    "server.validation.customProviderValidModel": "Connection succeeded and model {model} is available."
   }
 }
