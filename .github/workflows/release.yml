@@ -1,0 +1,62 @@
+name: Publish GitHub Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish changelog release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the tagged revision
+        uses: actions/checkout@v7
+
+      - name: Verify tag and package version
+        shell: bash
+        run: |
+          package_version="$(node -p "require('./package.json').version")"
+          if [[ "${GITHUB_REF_NAME}" != "v${package_version}" ]]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match package version v${package_version}." >&2
+            exit 1
+          fi
+
+      - name: Extract release notes from changelog
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const tag = process.env.RELEASE_TAG;
+          const changelog = fs.readFileSync('CHANGELOG.md', 'utf8');
+          const heading = `## SubMaker ${tag}`;
+          const start = changelog.indexOf(heading);
+          if (start < 0) throw new Error(`Missing changelog section: ${heading}`);
+          const contentStart = start + heading.length;
+          const next = changelog.indexOf('\n## SubMaker v', contentStart);
+          const notes = changelog.slice(contentStart, next < 0 ? undefined : next).trim();
+          if (!notes) throw new Error(`Empty changelog section: ${heading}`);
+          fs.writeFileSync('release-notes.md', `${notes}\n`);
+          NODE
+
+      - name: Publish release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            echo "Release ${GITHUB_REF_NAME} already exists."
+            exit 0
+          fi
+          gh release create "${GITHUB_REF_NAME}" \
+            --verify-tag \
+            --title "SubMaker ${GITHUB_REF_NAME}" \
+            --notes-file release-notes.md

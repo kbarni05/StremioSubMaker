@@ -16,6 +16,8 @@ No changes yet.
   source/file label inside the selected language instead of repeated names.
 - The configuration page paints immediately, loads saved state in the background,
   caches versioned assets and no longer waits on a loader waterfall or large emoji font.
+- Pushing a matching `v*` tag now publishes the GitHub release directly from this
+  changelog section, so release notes and Docker image tags cannot silently drift.
 - Gemini requests identify the installed SubMaker version and optionally retry once
   through a trusted HTTPS fallback only when Google rejects the server location.
 
