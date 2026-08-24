@@ -1,20 +1,22 @@
 {
   "name": "submaker-subtitle-translator",
-  "version": "1.8.2",
+  "version": "1.9.0",
   "xsyncMinVersion": "1.0.9",
   "description": "Take control of your subtitles! Fetch and translate subtitles from OpenSubtitles, SubScene and SubDL with a free Gemini AI key or multiple AI providers, without ever leaving Stremio.",
   "main": "index.js",
   "packageManager": "npm@11.17.0",
   "engines": {
-    "node": ">=22.9.0",
-    "npm": ">=11.17.0"
+    "node": ">=20.18.1",
+    "npm": ">=10.8.2"
   },
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js",
     "test": "node --test --test-force-exit",
     "test:tracked": "npm test",
-    "test:release": "npm test"
+    "test:release": "npm run test:tracked",
+    "test:manual": "npm run test:tracked",
+    "update:anime-list": "node update-anime-list.js"
   },
   "keywords": [
     "stremio",
@@ -44,6 +46,7 @@
     "helmet": "^8.1.0",
     "iconv-lite": "^0.7.0",
     "ioredis": "^6.0.0",
+    "ipaddr.js": "^2.5.0",
     "joi": "^18.2.3",
     "jszip": "^3.10.1",
     "lru-cache": "^11.2.2",
@@ -60,7 +63,9 @@
     "nodemon": "^3.0.2"
   },
   "overrides": {
-    "path-to-regexp@0.1.7": "0.1.13",
+    "router@1.3.8": {
+      "path-to-regexp": "0.1.13"
+    },
     "tmp": "0.2.7"
   },
   "allowScripts": {

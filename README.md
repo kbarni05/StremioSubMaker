@@ -11,7 +11,7 @@
 
 <p align="center">
   <a href="https://www.gnu.org/licenses/agpl-3.0"><img src="https://img.shields.io/badge/License-AGPL_v3-blue.svg?style=flat-square" alt="License: AGPL v3"/></a>
-  <img src="https://img.shields.io/badge/node-22.12%2B%20%7C%2024-brightgreen?style=flat-square" alt="Node 22.12+ or 24"/>
+  <img src="https://img.shields.io/badge/node-20.18%2B%20%7C%2022%20%7C%2024-brightgreen?style=flat-square" alt="Node 20.18+, 22, or 24"/>
   <img src="https://img.shields.io/badge/Stremio-Addon-purple?style=flat-square" alt="Stremio Addon"/>
   <img src="https://img.shields.io/badge/languages-433-orange?style=flat-square" alt="433 Languages"/>
   <img src="https://img.shields.io/badge/AI-10%2B%20providers-ff69b4?style=flat-square" alt="10+ AI Providers"/>
@@ -22,6 +22,7 @@
   <a href="#-features">Features</a> •
   <a href="#-quick-start">Quick Start</a> •
   <a href="#-how-it-works">How It Works</a> •
+  <a href="#-support-submaker">Support</a> •
   <a href="#-troubleshooting">Troubleshooting</a>
 </p>
 
@@ -121,7 +122,7 @@ to it and `Escape` to clear the results.
 | OpenSubtitles | Optional (recommended) | V3 or authenticated mode |
 | SubDL | API key | [subdl.com/panel/api](https://subdl.com/panel/api) |
 | SubSource | API key | [subsource.net](https://subsource.net/) |
-| Wyzie Subs | API key | [sub.wyzie.io/redeem](https://sub.wyzie.io/redeem) |
+| Wyzie Subs | API key | [store.wyzie.io/redeem](https://store.wyzie.io/redeem) |
 | Stremio Community Subtitles | None | Curated subtitles (beta) |
 | Subs.ro | API key | Romanian subtitles (beta) |
 
@@ -147,7 +148,7 @@ to it and `Escape` to clear the results.
 
 ### Prerequisites
 
-- **Node.js** 22.12+ or 24 LTS — [nodejs.org](https://nodejs.org)
+- **Node.js** 20.18.1+, 22, or 24 with npm 10.8.2+ — [nodejs.org](https://nodejs.org)
 - **Gemini API Key** — [Get free](https://aistudio.google.com/app/api-keys)
 - At least one subtitle provider key (optional but recommended)
 
@@ -315,6 +316,18 @@ Click the **Reset** button at the bottom of the config page.
 
 ---
 
+## 💙 Support SubMaker
+
+SubMaker is free and open source, and [ElfHosted](https://elfhosted.com/?utm_source=github&utm_medium=readme&utm_campaign=stremiosubmaker-readme) generously sponsors the public instance's hosting. Optional contributions help with the parts hosting does not cover: AI/API credits, RD/TB test access, maintenance tools, and time for fixes.
+
+Nothing is paywalled, and support does not buy priority or promise a release schedule. Using SubMaker, reporting useful bugs, and sharing the project already helps.
+
+### **[Help keep SubMaker in sync →](https://xtremexq.github.io/StremioSubMaker/support/)**
+
+The support page offers prefilled one-time and monthly support through GitHub Sponsors.
+
+---
+
 ## 🙏 Acknowledgments
 
 **Built With**
@@ -339,6 +352,7 @@ Click the **Reset** button at the bottom of the config page.
 | **Issues & Bugs** | [Open an issue](https://github.com/kbarni05/StremioSubMaker/issues) |
 | **Documentation** | Open `/configure` for the live interactive config/help page |
 | **Community** | [Stremio Discord](https://discord.gg/stremio) • [r/StremioAddons](https://reddit.com/r/StremioAddons) |
+| **Support the Project** | [Support page](https://xtremexq.github.io/StremioSubMaker/support/) |
 
 ---
 
@@ -350,5 +364,6 @@ Click the **Reset** button at the bottom of the config page.
 <p align="center">
   <a href="https://github.com/kbarni05/StremioSubMaker">⭐ Star this fork</a> •
   <a href="https://github.com/kbarni05/StremioSubMaker/issues">🐛 Report Bug</a> •
-  <a href="https://github.com/kbarni05/StremioSubMaker/issues">✨ Request Feature</a>
+  <a href="https://github.com/kbarni05/StremioSubMaker/issues">✨ Request Feature</a> •
+  <a href="https://xtremexq.github.io/StremioSubMaker/support/">💙 Support</a>
 </p>

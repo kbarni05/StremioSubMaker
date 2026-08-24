@@ -37,6 +37,7 @@
     "server": {
       "errors": {
         "storageUnavailable": "Session storage temporarily unavailable, please retry.",
+        "sessionCapacityReached": "Session storage capacity has been reached. No existing sessions were removed; please contact the server operator.",
         "configPayloadTooLarge": "Configuration payload too large",
         "originNotAllowed": "Origin not allowed",
         "stremioOnly": "Access denied. This addon must be accessed through Stremio.",
@@ -51,6 +52,22 @@
         "apiKeyRequired": "API key is required",
         "invalidSessionToken": "Invalid or expired session token",
         "modelsFailed": "Failed to fetch models: {reason}",
+        "baseUrlRequired": "Base URL is required for custom provider",
+        "customProviderModelRequired": "Model is required for custom provider",
+        "customProviderFieldsTooLong": "Custom provider configuration contains an overlong field",
+        "customProviderModelInvalid": "Custom provider model contains invalid characters",
+        "customProviderApiKeyInvalid": "Custom provider API key contains invalid characters",
+        "customProviderUnavailable": "Custom provider configuration could not be initialized",
+        "customProviderAuthFailed": "Authentication failed. Check the custom provider API key.",
+        "customProviderNotFound": "The custom provider base URL or model was not found.",
+        "customProviderRejected": "The provider rejected the test request. Check the base URL and model.",
+        "customProviderRateLimited": "The custom provider is rate limiting requests. Try again later.",
+        "customProviderServerError": "The custom provider returned a server error.",
+        "customProviderTimeout": "The custom provider test timed out.",
+        "customProviderDnsFailed": "The custom provider hostname could not be resolved.",
+        "customProviderConnectionFailed": "Could not connect to the custom provider.",
+        "customProviderBlocked": "The custom provider endpoint was blocked by server security policy.",
+        "customProviderTestFailed": "Could not validate the custom provider configuration.",
         "cloudflareTokenRequired": "Cloudflare Workers AI token is required",
         "cloudflareAccountRequired": "Cloudflare Workers AI account ID is required. Provide API key as ACCOUNT_ID|TOKEN.",
         "cloudflareCredentialsMissing": "Cloudflare Workers AI is missing credentials. Use ACCOUNT_ID|TOKEN.",
@@ -59,6 +76,8 @@
         "invalidApiKeyAuth": "Invalid API key - authentication failed",
         "requestFailed": "Request failed",
         "invalidApiKey": "Invalid API key",
+        "geminiUnsupportedLocation": "Gemini rejected this server network location. Your API key may still be valid; the host must use eligible Gemini egress and, where Google requires it, paid Gemini API access.",
+        "geminiRequestRejected": "Gemini rejected the request: {reason}",
         "usernamePasswordRequired": "Username and password are required",
         "noTokenReceived": "No token received - credentials may be invalid",
         "invalidCredentials": "Invalid username or password",
@@ -131,7 +150,8 @@
         "apiError": "API error: {reason}",
         "apiKeyValid": "API key is valid",
         "apiKeyAppearsValid": "API key appears valid",
-        "credentialsValid": "Credentials are valid"
+        "credentialsValid": "Credentials are valid",
+        "customProviderValid": "Custom provider configuration is valid"
       },
       "sync": {
         "saveSuccess": "Synced subtitle saved successfully"
@@ -139,6 +159,7 @@
     },
     "apiErrors": {
       "geminiRateLimit": "Gemini usage limit reached. Check your API key usage/quota or use another key.",
+      "geminiUnsupportedLocation": "Gemini rejected this server network location. Your API key may still be valid; ask the host to use eligible Gemini egress and paid access where required.",
       "rateLimit": "{service} rate limit exceeded. Please wait a few minutes and try again.",
       "serviceUnavailable": "{service} temporarily unavailable. Please try again in a few minutes.",
       "databaseUnavailable": "Subtitle server database temporarily unavailable. Trying next subtitle...",
@@ -608,6 +629,7 @@
       "translationFailed": "Translation Failed",
       "translationUnexpected": "An unexpected error occurred during translation.",
       "translationRetry": "An unexpected error occurred.\\nClick this subtitle again to retry translation.",
+      "translationGeminiLocation": "Translation Failed: Gemini Rejected Server Location",
       "translationAuth": "Translation Failed: Authentication Error (403)",
       "translationAuthBody": "Your Gemini API key is invalid or rejected.\\nPlease check that your API key is correct.",
       "translationAuthRetry": "Update your Gemini API key in the addon configuration,\\nthen reinstall the addon and try again.",
@@ -636,6 +658,8 @@
       "osAuthMissingRateLimited": "OpenSubtitles Auth mode is active without credentials, so downloads hit the basic rate limit. Add your username/password or switch to V3 (no login).",
       "providerRateLimitTitle": "{service} rate limit reached (429)",
       "providerRateLimitBody": "Too many requests in a short period.\\nPlease wait a few minutes and try again.",
+      "subdlDownloadQuotaTitle": "SubDL download quota reached (429)",
+      "subdlDownloadQuotaBody": "This SubDL API key cannot download more files right now.\\nCheck its SubDL usage, wait for the quota reset, use another key or plan, or choose another provider.",
       "providerAuthErrorTitle": "Authentication Error",
       "providerAuthErrorBody": "{service} rejected your API key or credentials",
       "notAvailableTitle": "Subtitle Not Available (Error 404)",
@@ -764,7 +788,7 @@
       },
       "footer": {
         "love": "Made with <span class=\"footer-heart\">❤️</span> for Stremio users everywhere",
-        "thanks": "Thank you for using SubMaker! Your support helps make content accessible to everyone."
+        "thanks": "Help keep better subtitles accessible by <a href=\"https://xtremexq.github.io/StremioSubMaker/support/\" target=\"_blank\" rel=\"noreferrer\">supporting the project</a>. Any amount helps!"
       },
       "quickSetup": {
         "title": "Quick Setup",
@@ -816,11 +840,10 @@
           "scsKeyNote": "Use your own SCS auth key for faster language-filtered requests.",
           "scsModeNote": "Community mode uses SubMaker's shared token; Auth mode sends only your selected languages.",
           "wyzieName": "Wyzie Subs",
-          "wyzieDesc": "Free subtitle aggregator with a free API key",
+          "wyzieDesc": "Subtitle aggregator that searches every source available to your API key",
           "wyzieKeyPlaceholder": "Enter Wyzie API key",
-          "wyzieGetKey": "Get your free API key at sub.wyzie.io/redeem",
-          "wyzieSources": "Sources:",
-          "wyzieMoreSources": "More sources = more subtitles but slower"
+          "wyzieGetKey": "Get your free API key at store.wyzie.io/redeem",
+          "wyzieAutoSources": "Wyzie automatically searches every current source available to your API-key plan."
         },
         "step3": {
           "title": "AI Translation",
@@ -899,7 +922,7 @@
           "disabled": "Disabled",
           "scsAuth": "Auth key",
           "scsCommunity": "Community token",
-          "wyzieSources": "Enabled ({count} sources)",
+          "wyzieSources": "All available sources",
           "aiTranslation": "AI Translation",
           "aiConfigured": "{model}",
           "aiNotConfigured": "Not configured",
@@ -1125,7 +1148,10 @@
         "geminiKeysRequired": "At least one API key is required for rotation",
         "geminiKeysFillEmpty": "Please fill in all API key fields before adding a new one",
         "apiKeyInvalid": "Invalid API key",
-        "apiError": "API error: {reason}"
+        "apiError": "API error: {reason}",
+        "customProviderModelRequired": "Enter a model for the custom provider",
+        "customProviderValid": "Custom provider configuration is valid",
+        "customProviderTestFailed": "Could not validate the custom provider configuration"
       },
       "alerts": {
         "sessionLost": "Config session was lost. Please reconfigure and save to create a new session.",
@@ -1187,12 +1213,12 @@
         "wyzie": {
           "title": "Wyzie Subs",
           "description": "Get your free API key from",
-          "linkLabel": "sub.wyzie.io/redeem",
+          "linkLabel": "store.wyzie.io/redeem",
           "placeholder": "Enter Wyzie API key",
           "validateTitle": "Validate API key",
           "validateCta": "Test",
           "toggleLabel": "Enable Wyzie Subs",
-          "note": "Wyzie aggregates subtitles from multiple sources. Results may overlap with other providers you have enabled."
+          "note": "Wyzie automatically searches every current source available to your API-key plan. Results may overlap with other providers you have enabled."
         },
         "scs": {
           "title": "Stremio Community Subtitles",
@@ -1256,7 +1282,7 @@
         "googleWeb": "web (fixed)",
         "googleHint": "Uses the public Google Translate web endpoint (may be unstable).",
         "testConnection": "Test connection",
-        "customHint": "For Ollama, LM Studio, LocalAI, or any OpenAI-compatible API. Leave API key empty if not required.",
+        "customHint": "For Ollama, LM Studio, LocalAI, or any OpenAI-compatible API. Leave API key empty if not required. Testing sends one small request.",
         "title": "AI Translation API Keys",
         "apiKey": {
           "label": "Gemini API Key",
@@ -1279,7 +1305,12 @@
             "pro31": "Gemini 3.1 Pro (preview)",
             "flashLite": "Gemini 2.5 Flash-Lite",
             "flash": "Gemini 2.5 Flash",
+            "flashLite31": "Gemini 3.1 Flash Lite",
             "flash3": "Gemini 3.0 Flash (beta)",
+            "flashLite35": "Gemini 3.5 Flash-Lite (beta)",
+            "flash35": "Gemini 3.5 Flash (beta)",
+            "flash36": "Gemini 3.6 Flash (beta)",
+            "flash37": "Gemini 3.7 Flash (beta)",
             "pro": "Gemini 2.5 Pro (beta)",
             "pro3": "Gemini 3.0 Pro (beta)"
           },
@@ -1452,6 +1483,15 @@
         "thinking": {
           "label": "Thinking Budget (Extended Reasoning)",
           "description": "Gemini 2.5: 0 disables thinking and -1 is dynamic. Gemini 3.x maps 0, 1-8192 and larger values to low, medium and high thinking."
+        },
+        "thinkingLevel": {
+          "label": "Thinking Level",
+          "description": "Controls Gemini 3.x reasoning. Minimal is the closest supported option to disabled thinking.",
+          "disabled": "Disabled (closest supported)",
+          "minimal": "Minimal",
+          "low": "Low",
+          "medium": "Medium",
+          "high": "High"
         },
         "temperature": {
           "label": "Temperature (Creativity)",
@@ -1628,6 +1668,15 @@
         "thinking": {
           "label": "Thinking Budget (Extended Reasoning)",
           "helper": "0 = disabled, -1 = dynamic (auto-adjust), or fixed token count (1-32768)."
+        },
+        "thinkingLevel": {
+          "label": "Thinking Level",
+          "helper": "Controls Gemini 3.x reasoning. Minimal is the closest supported option to disabled thinking.",
+          "disabled": "Disabled (closest supported)",
+          "minimal": "Minimal",
+          "low": "Low",
+          "medium": "Medium",
+          "high": "High"
         },
         "temperature": {
           "label": "Temperature (Creativity)",

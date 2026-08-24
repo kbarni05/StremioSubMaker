@@ -44,11 +44,12 @@ const { createRunningStatus, updateTranslationJobStatus } = require('../utils/tr
 const { deduplicateSubtitles, logDeduplicationStats } = require('../utils/subtitleDeduplication');
 const { version } = require('../utils/version');
 const { isProviderHealthy, circuitBreaker } = require('../utils/httpAgents');
-const { getShared, setShared, incrementCounter, decrementCounter, getCounter, CACHE_PREFIXES, CACHE_TTLS } = require('../utils/sharedCache');
+const { getShared, setShared, incrementCounter, decrementCounter, getCounter, tryAcquireLock, CACHE_PREFIXES, CACHE_TTLS } = require('../utils/sharedCache');
 const { getEffectiveGeminiModel } = require('../utils/config');
 const { applyExplicitFilenameSeasonHint, hasExplicitSeasonEpisodeMismatch, resolveAnimeVideoInfo } = require('../utils/animeSearchResolver');
 const { buildTmdbToImdbWikidataQuery } = require('../utils/tmdbWikidata');
 const { scheduleNonOverlappingInterval } = require('../utils/backgroundInterval');
+const { getApiErrorMessage, isOpenSubtitlesQuotaError } = require('../utils/apiErrorHandler');
 
 const fs = require('fs');
 const path = require('path');
@@ -480,6 +481,25 @@ function filterSubtitlesByRequestedLanguages(subtitles = [], requestedLanguages 
   }
 
   return subtitles.filter(sub => sub?.languageCode && expandedRequested.has(sub.languageCode));
+}
+
+function subtitleMatchesRequestedLanguage(subtitle, requestedLanguage) {
+  const subtitleLanguage = normalizeLanguageCode(subtitle?.languageCode || '');
+  if (!subtitleLanguage) return false;
+  return expandRequestedLanguageSet([requestedLanguage]).has(subtitleLanguage);
+}
+
+function buildStremioSubtitleVariantLabel(subtitle, fallbackIndex = 0) {
+  const cleanPart = (value, maxLength = 140) => String(value || '')
+    .replace(/[\u0000-\u001f\u007f]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, maxLength);
+  const name = cleanPart(subtitle?.originalFilename || subtitle?.name);
+  const provider = cleanPart(subtitle?.provider, 40);
+  const usefulName = name && name.toLowerCase() !== 'unknown' ? name : '';
+  const parts = [usefulName, provider].filter(Boolean);
+  return parts.length > 0 ? parts.join(' • ') : `Subtitle #${fallbackIndex + 1}`;
 }
 
 function getMaxSubtitlesPerLanguage(config) {
@@ -925,21 +945,19 @@ function buildPartialSrtWithTail(mergedSrt, uiLanguage = 'en') {
 
 /**
  * Create an error subtitle for session token not found
- * @param {string|null} regeneratedToken - Optional regenerated token for quick reinstall link
- * @param {string|null} baseUrl - Optional base URL for generating reinstall link
+ * @param {string|null} _unusedRegeneratedToken - Retained for call-site compatibility; never used to create or expose a token
+ * @param {string|null} baseUrl - Optional base URL for the read-only Configure recovery link
  * @returns {string} - SRT formatted error subtitle
  */
-function createSessionTokenErrorSubtitle(regeneratedToken = null, baseUrl = null, uiLanguage = 'en') {
+function createSessionTokenErrorSubtitle(_unusedRegeneratedToken = null, baseUrl = null, uiLanguage = 'en') {
   const t = getTranslator(uiLanguage);
   let reinstallInstruction = t('subtitle.sessionErrorAdvice', {}, 'Please reconfig and reinstall the addon.');
 
-  // If we have a regenerated token, provide a direct reinstall link
-  if (regeneratedToken && baseUrl) {
-    const reinstallUrl = `${baseUrl}/configure/${regeneratedToken}`;
-    reinstallInstruction = `${t('subtitle.sessionErrorQuickFix', {}, 'Quick fix: Open this link to reinstall with fresh config:')}\n${reinstallUrl}`;
-  } else if (regeneratedToken) {
-    // Token available but no base URL - just mention the token
-    reinstallInstruction = `${t('subtitle.sessionErrorToken', {}, 'A fresh config was created. Use this token to reinstall:')}\n${regeneratedToken}`;
+  // Error-subtitle GET requests must stay read-only. Point users at a fresh
+  // Configure draft; saving there explicitly calls the limited POST endpoint.
+  if (baseUrl) {
+    const configureUrl = `${String(baseUrl).replace(/\/$/, '')}/configure`;
+    reinstallInstruction = `${reinstallInstruction}\n${configureUrl}`;
   }
 
   const srt = `1
@@ -1174,7 +1192,11 @@ function createTranslationErrorSubtitle(errorType, errorMessage, uiLanguage = 'e
     return providerNames[provider] || provider.charAt(0).toUpperCase() + provider.slice(1);
   })();
 
-  if (errorType === '403') {
+  if (errorType === 'GEMINI_UNSUPPORTED_LOCATION') {
+    return ensureInformationalSubtitleSize(`1
+00:00:00,000 --> 04:00:00,000
+${t('subtitle.translationGeminiLocation', {}, 'Translation Failed: Gemini Rejected Server Location')}`, null, uiLanguage);
+  } else if (errorType === '403') {
     return ensureInformationalSubtitleSize(`1
 00:00:00,000 --> 04:00:00,000
 ${t('subtitle.translationAuth', { provider: displayProvider }, `Translation Failed: Authentication Error (403)`)}
@@ -1201,6 +1223,11 @@ ${t('subtitle.translationRateLimitDeeplBody', {}, 'DeepL API rate/quota limit re
 00:00:00,000 --> 04:00:00,000
 ${t('subtitle.translationRateLimit', { provider: displayProvider }, `Translation Failed: ${displayProvider} Rate Limit (429)`)}
 ${t('subtitle.translationRateLimitBody', { provider: displayProvider }, `${displayProvider} rate or quota limit reached.\nWait a few minutes, then click this subtitle again to retry.`)}`, null, uiLanguage);
+  } else if (errorType === 'RESPONSE_TOO_LARGE') {
+    return ensureInformationalSubtitleSize(`1
+00:00:00,000 --> 04:00:00,000
+${t('subtitle.translationResponseTooLarge', {}, 'Translation Failed: Provider Response Too Large')}
+${t('subtitle.translationResponseTooLargeBody', { provider: displayProvider }, `${displayProvider} returned more data than SubMaker can process safely.\nTry a different subtitle, model, or provider.`)}`, null, uiLanguage);
   } else if (errorType === 'MAX_TOKENS') {
     return ensureInformationalSubtitleSize(`1
 00:00:00,000 --> 04:00:00,000
@@ -1360,6 +1387,14 @@ async function verifyBypassCacheIntegrity() {
 async function purgeLegacyTranslationCacheEntries() {
   try {
     const adapter = await getStorageAdapter();
+    const maintenanceLock = await tryAcquireLock(
+      'maintenance:legacy-translation-cache-purge:v1',
+      7 * 24 * 60 * 60 * 1000
+    );
+    if (!maintenanceLock.acquired) {
+      log.debug(() => '[Cache] Legacy translation purge already handled by another replica; skipping');
+      return;
+    }
     const keys = await adapter.list(StorageAdapter.CACHE_TYPES.TRANSLATION);
     if (!Array.isArray(keys) || keys.length === 0) {
       return;
@@ -3086,10 +3121,8 @@ function createSubtitleHandler(config) {
           } else {
             log.debug(() => '[Subtitles] Wyzie Subs provider is enabled');
             const wyzie = new WyzieSubsService(wyzieApiKey);
-            // Pass sources config so Wyzie only queries user-selected sources
-            const wyzieParams = { ...searchParams, sources: config.subtitleProviders.wyzie.sources };
             addSearchTask('WyzieSubs',
-              wyzie.searchSubtitles(wyzieParams)
+              wyzie.searchSubtitles(searchParams)
                 .then(results => {
                   circuitBreaker.recordSuccess('wyzie');
                   return { provider: 'WyzieSubs', results };
@@ -3245,7 +3278,7 @@ function createSubtitleHandler(config) {
           }
           return true;
         })
-        .map(sub => {
+        .map((sub, subtitleIndex) => {
           // Display-friendly label for Stremio UI while preserving code for URL
           const displayLang = (sub.languageCode && sub.languageCode.toLowerCase() === 'spn')
             ? getLocalizedLanguageName('spn', uiLanguage, 'Spanish (Latin America)')
@@ -3255,6 +3288,7 @@ function createSubtitleHandler(config) {
           const subtitle = {
             id: `${sub.fileId}`,
             lang: displayLang,
+            label: buildStremioSubtitleVariantLabel(sub, subtitleIndex),
             url: `{{ADDON_URL}}/${subtitleRouteBase}/${toPathSegment(sub.fileId)}/${toPathSegment(sub.languageCode)}${urlExtension}`,
             name: String(sub.name || sub.fileName || sub.filename || '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, 180),
             forced: trackMetadata.forced,
@@ -3345,10 +3379,7 @@ function createSubtitleHandler(config) {
         // Create translation entries: for each target language, create entries for top source language subtitles
         // Note: filteredFoundSubtitles is already limited to MAX_SUBS_PER_LANGUAGE per language (including source languages)
         const providerSourceSubtitles = filteredFoundSubtitles.filter(sub =>
-          config.sourceLanguages.some(sourceLang => {
-            const normalized = normalizeLanguageCode(sourceLang);
-            return sub.languageCode === normalized;
-          })
+          config.sourceLanguages.some(sourceLang => subtitleMatchesRequestedLanguage(sub, sourceLang))
         );
 
         // Add embedded originals as source subtitles when they match configured source languages
@@ -3359,12 +3390,16 @@ function createSubtitleHandler(config) {
             if (!entry || !entry.trackId) continue;
             const normalizedSource = normalizeLanguageCode(entry.languageCode || '');
             if (!normalizedSource) continue;
-            const isAllowedSource = config.sourceLanguages.some(sourceLang => normalizeLanguageCode(sourceLang) === normalizedSource);
+            const isAllowedSource = config.sourceLanguages.some(sourceLang =>
+              subtitleMatchesRequestedLanguage({ languageCode: normalizedSource }, sourceLang)
+            );
             if (!isAllowedSource) continue;
             const embeddedFileId = entry.cacheKey ? `xembed_${entry.cacheKey}` : `xembed_${hash}_${entry.trackId}`;
             embeddedSourceSubtitles.push({
               fileId: embeddedFileId,
-              languageCode: normalizedSource
+              languageCode: normalizedSource,
+              name: entry.metadata?.filename || entry.metadata?.title || `Embedded track ${entry.trackId}`,
+              provider: 'xEmbed'
             });
           }
         }
@@ -3390,7 +3425,7 @@ function createSubtitleHandler(config) {
           );
           log.debug(() => `[Subtitles] Creating translation entries for ${baseName} (${targetLang})`);
 
-          for (const sourceSub of sourceSubtitles) {
+          for (const [sourceIndex, sourceSub] of sourceSubtitles.entries()) {
             const displayName = buildStremioActionLabel({
               kind: 'translate',
               language: baseName,
@@ -3410,6 +3445,7 @@ function createSubtitleHandler(config) {
             const translationEntry = {
               id: `translate_${config.mobileMode === true ? `m${subtitleSearchRevision}_` : ''}${sourceSub.fileId}_to_${targetLang}`,
               lang: displayName, // Display as "Make Language" in Stremio UI
+              label: `${displayName} • ${buildStremioSubtitleVariantLabel(sourceSub, sourceIndex)}`,
               url: `{{ADDON_URL}}/translate/${sourceSub.fileId}/${targetLang}${translationUrlExtension}${translateQuery}`
             };
             translationEntries.push(translationEntry);
@@ -3425,7 +3461,7 @@ function createSubtitleHandler(config) {
         if (config.learnMode === true) {
           const normalizedLearnLangs = [...new Set((config.learnTargetLanguages || []).map(lang => normalizeLanguageCode(lang)))];
           const sourceSubtitles = filteredFoundSubtitles.filter(sub =>
-            config.sourceLanguages.some(sourceLang => normalizeLanguageCode(sourceLang) === sub.languageCode)
+            config.sourceLanguages.some(sourceLang => subtitleMatchesRequestedLanguage(sub, sourceLang))
           );
 
           for (const learnLang of normalizedLearnLangs) {
@@ -3434,7 +3470,7 @@ function createSubtitleHandler(config) {
               uiLanguage,
               getLanguageName(learnLang) || learnLang
             );
-            for (const sourceSub of sourceSubtitles) {
+            for (const [sourceIndex, sourceSub] of sourceSubtitles.entries()) {
               const displayName = buildStremioActionLabel({
                 kind: 'learn',
                 language: baseName,
@@ -3443,6 +3479,7 @@ function createSubtitleHandler(config) {
               learnEntries.push({
                 id: `learn_${sourceSub.fileId}_to_${learnLang}`,
                 lang: displayName,
+                label: `${displayName} • ${buildStremioSubtitleVariantLabel(sourceSub, sourceIndex)}`,
                 url: `{{ADDON_URL}}/learn/${sourceSub.fileId}/${learnLang}.vtt`
               });
             }
@@ -4036,10 +4073,22 @@ ${hint}`, null, uiLanguage);
         return createOpenSubtitlesV3RateLimitSubtitle(config.uiLanguage || 'en');
       }
 
+      // SubDL archive requests use the configured API key. A download-time 429
+      // therefore means that key's download allowance is unavailable, not a
+      // short anonymous-IP burst that will necessarily clear in a few minutes.
+      if (fileId.startsWith('subdl_')) {
+        return ensureInformationalSubtitleSize(`1
+00:00:00,000 --> 00:00:03,000
+${t('subtitle.subdlDownloadQuotaTitle', {}, 'SubDL download quota reached (429)')}
+
+2
+00:00:03,001 --> 04:00:00,000
+${t('subtitle.subdlDownloadQuotaBody', {}, 'This SubDL API key cannot download more files right now.\nCheck its SubDL usage, wait for the quota reset, use another key or plan, or choose another provider.')}`, null, uiLanguage);
+      }
+
       // Determine which service based on fileId (generic two-cue fallback)
       let serviceName = 'Subtitle Provider';
-      if (fileId.startsWith('subdl_')) serviceName = 'SubDL';
-      else if (fileId.startsWith('subsource_')) serviceName = 'SubSource';
+      if (fileId.startsWith('subsource_')) serviceName = 'SubSource';
       else if (fileId.startsWith('scs_')) serviceName = 'Stremio Community Subtitles';
       else if (fileId.startsWith('wyzie_')) serviceName = 'Wyzie Subs';
       else if (fileId.startsWith('subsro_')) serviceName = 'Subs.ro';
@@ -4059,7 +4108,7 @@ ${t('subtitle.providerRateLimitBody', {}, 'Too many requests in a short period.\
       return createSubDLCloudflareBlockedSubtitle(config.uiLanguage || 'en');
     }
 
-    const rawMsg = (error.response?.data?.message || error.message || '').toString();
+    const rawMsg = getApiErrorMessage(error);
     const lowerMsg = rawMsg.toLowerCase();
     // CDN 403 (file unavailable) and rate-limit 403 (cannot consume) are NOT auth failures
     const is403ButNotAuth = errorStatus === 403 && (
@@ -4171,9 +4220,7 @@ ${t('subtitle.providerServerErrorBody', {}, 'The subtitle server is experiencing
     // Handle OpenSubtitles daily quota exceeded (HTTP 406 with specific message)
     // Only applies to OpenSubtitles Auth (v1) path where fileId has no provider prefix
     if (!fileId.startsWith('subdl_') && !fileId.startsWith('subsource_') && !fileId.startsWith('v3_') && !fileId.startsWith('wyzie_') && !fileId.startsWith('scs_') && !fileId.startsWith('subsro_')) {
-      const isOsQuota = (errorStatus === 406) ||
-        lowerMsg.includes('allowed') && lowerMsg.includes('subtitles') ||
-        (lowerMsg.includes('quota') && lowerMsg.includes('renew'));
+      const isOsQuota = isOpenSubtitlesQuotaError(error);
       if (isOsQuota) {
         // Pass the actual API error message so VIP/Gold users see their real quota (e.g., 200, 1000)
         // instead of hardcoded "20 subtitles"
@@ -6448,6 +6495,8 @@ module.exports = {
   createSubDLCloudflareBlockedSubtitle,
   createInvalidSubtitleMessage,
   filterSubtitlesByRequestedLanguages,
+  subtitleMatchesRequestedLanguage,
+  buildStremioSubtitleVariantLabel,
   collectProviderSearchResults,
   deduplicateSearch,
   maybeConvertToSRT,

@@ -2,19 +2,37 @@
     <div class="ui-language-dock" id="uiLanguageDock" role="group" aria-label="UI language"
         data-i18n="config.uiLanguageAria" data-i18n-attr="aria-label">
         <div class="ui-language-glow" aria-hidden="true"></div>
-        <div class="ui-language-flag-row" id="uiLanguageFlags">
-            <!-- Flags are rendered dynamically -->
+        <div class="ui-language-flag-row" id="uiLanguageFlags" data-preboot>
+            <button type="button" class="ui-lang-flag" data-lang="en" aria-label="English">
+                <span class="ui-lang-flag-icon preboot-flag preboot-flag-en" aria-hidden="true">EN</span>
+            </button>
+            <button type="button" class="ui-lang-flag" data-lang="es" aria-label="Spanish">
+                <span class="ui-lang-flag-icon preboot-flag preboot-flag-es" aria-hidden="true">ES</span>
+            </button>
+            <button type="button" class="ui-lang-flag" data-lang="pt-br" aria-label="Portuguese (Brazil)">
+                <span class="ui-lang-flag-icon preboot-flag preboot-flag-pt-br" aria-hidden="true">BR</span>
+            </button>
+            <button type="button" class="ui-lang-flag" data-lang="pt-pt" aria-label="Portuguese (Portugal)">
+                <span class="ui-lang-flag-icon preboot-flag preboot-flag-pt-pt" aria-hidden="true">PT</span>
+            </button>
+            <button type="button" class="ui-lang-flag" data-lang="ar" aria-label="Arabic">
+                <span class="ui-lang-flag-icon preboot-flag preboot-flag-ar" aria-hidden="true">AR</span>
+            </button>
+            <button type="button" class="ui-lang-flag" data-lang="hu" aria-label="Magyar">
+                <span class="ui-lang-flag-icon preboot-flag preboot-flag-hu" aria-hidden="true">HU</span>
+            </button>
         </div>
     </div>
 
     <div class="header">
         <div class="logo">
-            <img src="/logo.png" alt="SubMaker Logo" style="width: 80px; height: 80px; border-radius: 18px;">
+            <img src="/logo.png?v=__APP_VERSION_QUERY__" alt="SubMaker Logo" width="80" height="80"
+                style="width: 80px; height: 80px; border-radius: 18px;">
         </div>
         <h1 id="heroTitle" data-i18n="config.heroTitle">SubMaker</h1>
         <div class="version-badge-wrapper">
             <p class="subtitle" id="heroSubtitle" data-i18n="config.heroSubtitle">AI-Powered Subtitle Translation</p>
-            <span id="version-badge" class="version-badge" style="display:none;"></span>
+            <span id="version-badge" class="version-badge" style="display:inline-flex;">v__APP_VERSION_QUERY__</span>
         </div>
     </div>
 
@@ -105,6 +123,33 @@
     <button class="help-button mario" id="configHelp" title="Help" aria-label="Help" data-i18n="config.quickActionHelp"
         data-i18n-attr="title,aria-label">?</button>
 
+    <script>
+        // Paint locally-known shell controls as soon as they enter the DOM.
+        // The full initializer validates and replaces this optimistic state.
+        (function () {
+            try {
+                var urlToken = new URL(window.location.href).searchParams.get('config') || '';
+                var storedToken = localStorage.getItem('submaker_session_token') || '';
+                var intendedToken = /^[a-f0-9]{32}$/i.test(urlToken) ? urlToken : storedToken;
+                var cachedToken = localStorage.getItem('submaker_config_cache_token') || '';
+                if (!/^[a-f0-9]{32}$/i.test(intendedToken) || cachedToken !== intendedToken) return;
+                var cachedConfig = JSON.parse(localStorage.getItem('submaker_config_cache') || 'null');
+                var toolboxEnabled = cachedConfig && (
+                    cachedConfig.subToolboxEnabled === true ||
+                    cachedConfig.fileTranslationEnabled === true ||
+                    cachedConfig.syncSubtitlesEnabled === true
+                );
+                if (!toolboxEnabled) return;
+                var launcher = document.getElementById('subToolboxLauncher');
+                if (launcher) {
+                    launcher.style.display = 'flex';
+                    launcher.classList.add('show');
+                    launcher.dataset.configRef = intendedToken;
+                }
+            } catch (_) { }
+        })();
+    </script>
+
     <!-- Disable native HTML validation: we run all validation in config.js and hidden inputs (provider advanced sliders) can trip browser validity when collapsed -->
     <form id="configForm" autocomplete="off" spellcheck="false" novalidate>
 
@@ -134,7 +179,7 @@
                     <div class="portal-header-left">
                         <span class="portal-icon">✨</span>
                         <span class="portal-title" data-i18n="config.whatsNew.title">What's New</span>
-                        <span class="portal-version-badge" id="portalVersionBadge"></span>
+                        <span class="portal-version-badge" id="portalVersionBadge">v__APP_VERSION_QUERY__</span>
                     </div>
                     <div class="portal-header-right">
                         <span class="portal-new-dot" id="portalNewDot" style="display:none;"
@@ -567,9 +612,9 @@
                                                     <span data-i18n="config.providers.wyzie.description">Get your free API key
                                                         from</span>
                                                     <a id="wyzieLink" data-i18n="config.providers.wyzie.linkLabel"
-                                                        href="https://sub.wyzie.io/redeem" target="_blank"
+                                                        href="https://store.wyzie.io/redeem" target="_blank"
                                                         rel="noopener noreferrer"
-                                                        style="color: var(--primary-light);">sub.wyzie.io/redeem</a>
+                                                        style="color: var(--primary-light);">store.wyzie.io/redeem</a>
                                                 </span>
                                             </div>
                                         </label>
@@ -595,74 +640,10 @@
                                             </button>
                                         </div>
                                         <div class="validation-feedback" id="wyzieValidationFeedback"></div>
-                                        <!-- Wyzie Sources (compact grid) -->
-                                        <div id="wyzieSources" style="margin-top: 0.75rem;">
-                                            <div
-                                                style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.25rem;">
-                                                Sources:
-                                            </div>
-                                            <div
-                                                style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.25rem 0.5rem; font-size: 0.8rem;">
-                                                <label
-                                                    style="display: flex; align-items: center; gap: 0.25rem; cursor: pointer;">
-                                                    <input type="checkbox" id="wyzieSourceOpensubtitles"
-                                                        style="width: 14px; height: 14px;">
-                                                    <span>OpenSubtitles</span>
-                                                </label>
-                                                <label
-                                                    style="display: flex; align-items: center; gap: 0.25rem; cursor: pointer;">
-                                                    <input type="checkbox" id="wyzieSourceSubf2m"
-                                                        style="width: 14px; height: 14px;">
-                                                    <span>Subf2m</span>
-                                                </label>
-                                                <label
-                                                    style="display: flex; align-items: center; gap: 0.25rem; cursor: pointer;">
-                                                    <input type="checkbox" id="wyzieSourceSubdl"
-                                                        style="width: 14px; height: 14px;">
-                                                    <span>SubDL</span>
-                                                </label>
-                                                <label
-                                                    style="display: flex; align-items: center; gap: 0.25rem; cursor: pointer;">
-                                                    <input type="checkbox" id="wyzieSourcePodnapisi"
-                                                        style="width: 14px; height: 14px;">
-                                                    <span>Podnapisi</span>
-                                                </label>
-                                                <label
-                                                    style="display: flex; align-items: center; gap: 0.25rem; cursor: pointer;">
-                                                    <input type="checkbox" id="wyzieSourceGestdown"
-                                                        style="width: 14px; height: 14px;">
-                                                    <span>Gestdown</span>
-                                                </label>
-                                                <label
-                                                    style="display: flex; align-items: center; gap: 0.25rem; cursor: pointer;">
-                                                    <input type="checkbox" id="wyzieSourceAnimetosho"
-                                                        style="width: 14px; height: 14px;">
-                                                    <span>Animetosho</span>
-                                                </label>
-                                                <label
-                                                    style="display: flex; align-items: center; gap: 0.25rem; cursor: pointer;">
-                                                    <input type="checkbox" id="wyzieSourceKitsunekko"
-                                                        style="width: 14px; height: 14px;">
-                                                    <span>Kitsunekko</span>
-                                                </label>
-                                                <label
-                                                    style="display: flex; align-items: center; gap: 0.25rem; cursor: pointer;">
-                                                    <input type="checkbox" id="wyzieSourceJimaku"
-                                                        style="width: 14px; height: 14px;">
-                                                    <span>Jimaku</span>
-                                                </label>
-                                                <label
-                                                    style="display: flex; align-items: center; gap: 0.25rem; cursor: pointer;">
-                                                    <input type="checkbox" id="wyzieSourceYify"
-                                                        style="width: 14px; height: 14px;">
-                                                    <span>YIFY</span>
-                                                </label>
-                                            </div>
-                                        </div>
                                         <div id="wyzieNote"
                                             style="font-size: 0.75rem; color: var(--text-secondary); padding: 0.4rem; background: var(--surface-light); border-radius: 6px; margin-top: 0.5rem;">
-                                            <span data-i18n="config.providers.wyzie.note">More sources = more subtitles but
-                                                slower. Uncheck sources you don't need.</span>
+                                            <span data-i18n="config.providers.wyzie.note">Wyzie automatically searches every
+                                                current source available to your API-key plan.</span>
                                         </div>
                                     </div>
                                 </div>
@@ -788,7 +769,7 @@
                                 <span class="label-description" id="geminiApiHelper">
                                     <span data-i18n="config.gemini.apiKey.helper">Get your free API key from</span>
                                     <a data-i18n="config.gemini.apiKey.linkLabel"
-                                        href="https://makersuite.google.com/app/apikey" target="_blank"
+                                        href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer"
                                         style="color: var(--primary-light);">Google AI Studio</a>
                                 </span>
                             </label>
@@ -874,7 +855,6 @@
                                 <option value="gemini-3.5-flash-lite"
                                     data-i18n="config.gemini.model.options.flashLite35">Gemini 3.5 Flash-Lite (beta)
                                 </option>
-
                             </select>
                             <div class="field-error" id="geminiModelError"
                                 data-i18n="config.validation.geminiModelRequired">Please select a model</div>
@@ -885,15 +865,6 @@
                                     translation while the source subtitle is fine?</strong> <span
                                     data-i18n="config.gemini.model.retranslationHintBody">Quickly triple-click the
                                     subtitle to force a fresh re-translation, or change translation settings.</span>
-                            </div>
-                            <div id="proRateLimitWarning"
-                                style="display: none; margin-top: 0.75rem; padding: 0.75rem; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 8px; font-size: 0.875rem; color: var(--text-secondary);">
-                                <strong style="color: #ef4444;" data-i18n="config.gemini.model.rateWarningTitle">⚠️ Free
-                                    Tier Limitation:</strong> <span data-i18n="config.gemini.model.rateWarningBody">If
-                                    using a free API key,
-                                    Gemini 2.5 Pro may trigger rate limits (HTTP 429). You'll likely only be able to
-                                    translate one
-                                    subtitle at a time.</span>
                             </div>
                         </div>
 
@@ -1236,7 +1207,7 @@
                                         <div style="display:flex; flex-wrap:wrap; align-items:center; gap:0.6rem;">
                                             <button type="button" class="validate-api-btn compact" id="validateCustomProvider"
                                                 title="Test custom provider connection"
-                                                data-i18n="config.providersUi.customValidateTitle" data-i18n-attr="title">
+                                                data-i18n="config.providersUi.testConnection" data-i18n-attr="title">
                                                 <span class="validate-icon">✓</span>
                                                 <span class="validate-text"
                                                     data-i18n="config.providersUi.customValidateCta">Test connection</span>
@@ -1246,7 +1217,7 @@
                                         </div>
                                         <span class="label-description" data-i18n="config.providersUi.customHint">
                                             For Ollama, LM Studio, LocalAI, or any OpenAI-compatible API.
-                                            Leave API key empty if not required.
+                                            Leave API key empty if not required. Testing sends one small request.
                                         </span>
                                     </div>
                                 </div>
@@ -2270,7 +2241,7 @@
                     <div class="model-status" id="modelStatus"></div>
                 </div>
 
-                <div class="form-group">
+                <div class="form-group" id="advancedThinkingBudgetGroup">
                     <label for="advancedThinkingBudget">
                         <span data-i18n="config.advancedGemini.thinking.label">Thinking Budget (Extended
                             Reasoning)</span>
@@ -2280,6 +2251,23 @@
                     </label>
                     <input type="number" id="advancedThinkingBudget" min="-1" max="32768" step="1" value="0"
                         placeholder="0">
+                </div>
+
+                <div class="form-group" id="advancedThinkingLevelGroup" style="display: none;">
+                    <label for="advancedThinkingLevel">
+                        <span data-i18n="config.advancedGemini.thinkingLevel.label">Thinking Level</span>
+                        <span class="label-description"
+                            data-i18n="config.advancedGemini.thinkingLevel.description">Controls Gemini 3.x reasoning.
+                            Minimal is the closest supported option to disabled thinking.</span>
+                    </label>
+                    <select id="advancedThinkingLevel">
+                        <option value="disabled" data-i18n="config.advancedGemini.thinkingLevel.disabled">Disabled
+                            (closest supported)</option>
+                        <option value="minimal" data-i18n="config.advancedGemini.thinkingLevel.minimal">Minimal</option>
+                        <option value="low" data-i18n="config.advancedGemini.thinkingLevel.low">Low</option>
+                        <option value="medium" data-i18n="config.advancedGemini.thinkingLevel.medium">Medium</option>
+                        <option value="high" data-i18n="config.advancedGemini.thinkingLevel.high">High</option>
+                    </select>
                 </div>
 
                 <div class="form-group">

@@ -61,7 +61,10 @@ test('explicit Gemini validation bypasses a stale cached authentication failure'
     const service = new GeminiService(aqKey, 'gemini-3.7-flash');
     await cacheProviderAuthFailure(getProviderAuthFailureCacheKey('gemini', aqKey));
 
-    assert.deepEqual(await service.getAvailableModels({ silent: true, throwOnError: true }), []);
+    await assert.rejects(
+      service.getAvailableModels({ silent: true, throwOnError: true }),
+      error => error.statusCode === 401 && error.type === 'authentication'
+    );
     assert.equal(request, null);
 
     const models = await service.getAvailableModels({

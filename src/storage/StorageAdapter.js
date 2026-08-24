@@ -1,3 +1,75 @@
+const MEBIBYTE = 1024 * 1024;
+const GIBIBYTE = 1024 * MEBIBYTE;
+
+function positiveByteLimit(env, name, fallback) {
+  const raw = env?.[name];
+  if (raw === undefined || raw === null || raw === '') return fallback;
+
+  const parsed = Number(raw);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+/**
+ * Resolve byte limits once at process startup. The public ElfHosted deployment
+ * predates the self-hosted 4 GiB Compose profile and runs a separately managed,
+ * unbounded Redis HA deployment. Keep its existing budgets byte-for-byte stable
+ * while giving ordinary self-hosters defaults that leave meaningful Redis
+ * headroom for sessions, indexes, allocator fragmentation and persistence/
+ * replication buffers.
+ *
+ * Every individual CACHE_LIMIT_* override remains authoritative.
+ *
+ * @param {NodeJS.ProcessEnv|object} env
+ * @returns {Record<string, number|null>}
+ */
+function resolveSizeLimits(env = process.env) {
+  const preserveElfHostedBudgets = env?.ELFHOSTED === 'true';
+  const defaults = preserveElfHostedBudgets
+      ? {
+        // Preserve the managed deployment's existing unbounded session-byte
+        // profile. Operators can opt in with SESSION_STORAGE_MAX_BYTES after
+        // measuring their live namespace and Redis headroom.
+        session: null,
+        translation: 1.5 * GIBIBYTE,
+        bypass: 0.5 * GIBIBYTE,
+        partial: 0.5 * GIBIBYTE,
+        sync: 0.5 * GIBIBYTE,
+        autosub: 0.5 * GIBIBYTE,
+        embedded: 0.5 * GIBIBYTE,
+        history: GIBIBYTE,
+        provider_meta: 250 * MEBIBYTE,
+        smdb: 2 * GIBIBYTE
+      }
+      : {
+        // 3 GiB total including a 512 MiB hard session-payload quota. This
+        // leaves 1 GiB (25%) of the bundled 4 GiB Redis for metadata/indexes,
+        // allocator fragmentation and Redis persistence/replication overhead.
+        session: 512 * MEBIBYTE,
+        translation: 768 * MEBIBYTE,
+        bypass: 128 * MEBIBYTE,
+        partial: 128 * MEBIBYTE,
+        sync: 192 * MEBIBYTE,
+        autosub: 192 * MEBIBYTE,
+        embedded: 192 * MEBIBYTE,
+        history: 256 * MEBIBYTE,
+        provider_meta: 64 * MEBIBYTE,
+        smdb: 640 * MEBIBYTE
+      };
+
+  return {
+    translation: positiveByteLimit(env, 'CACHE_LIMIT_TRANSLATION', defaults.translation),
+    bypass: positiveByteLimit(env, 'CACHE_LIMIT_BYPASS', defaults.bypass),
+    partial: positiveByteLimit(env, 'CACHE_LIMIT_PARTIAL', defaults.partial),
+    sync: positiveByteLimit(env, 'CACHE_LIMIT_SYNC', defaults.sync),
+    autosub: positiveByteLimit(env, 'CACHE_LIMIT_AUTOSUB', defaults.autosub),
+    embedded: positiveByteLimit(env, 'CACHE_LIMIT_EMBEDDED', defaults.embedded),
+    session: positiveByteLimit(env, 'SESSION_STORAGE_MAX_BYTES', defaults.session),
+    history: positiveByteLimit(env, 'CACHE_LIMIT_HISTORY', defaults.history),
+    provider_meta: positiveByteLimit(env, 'CACHE_LIMIT_PROVIDER_META', defaults.provider_meta),
+    smdb: positiveByteLimit(env, 'CACHE_LIMIT_SMDB', defaults.smdb)
+  };
+}
+
 /**
  * Storage Adapter Interface
  *
@@ -32,6 +104,28 @@ class StorageAdapter {
    */
   async set(key, value, cacheType, ttl = null) {
     throw new Error('Method set() must be implemented');
+  }
+
+  /**
+   * Atomically admit and persist a new session under count and byte limits.
+   * Implementations must not evict an existing session to make room.
+   *
+   * @param {string} key - New session token
+   * @param {any} value - Serialized session wrapper
+   * @param {number|null} ttl - Time to live in seconds
+   * @param {{maxSessions?: number, maxBytes?: number}} limits - Hard admission limits
+   * @returns {Promise<{ok: boolean, reason?: string, current?: number, limit?: number}>}
+   */
+  async createSession(key, value, ttl = null, limits = {}) {
+    throw new Error('Method createSession() must be implemented');
+  }
+
+  /**
+   * Persist an existing session while preserving the hard byte quota.
+   * @returns {Promise<{ok: boolean, reason?: string, current?: number, limit?: number}>}
+   */
+  async updateSession(key, value, ttl = null, limits = {}) {
+    throw new Error('Method updateSession() must be implemented');
   }
 
   /**
@@ -129,50 +223,45 @@ class StorageAdapter {
 
 // Cache types
 StorageAdapter.CACHE_TYPES = {
-  TRANSLATION: 'translation',      // Permanent translation cache (50GB)
-  BYPASS: 'bypass',                // Temporary user-scoped cache (10GB, 12h TTL)
-  PARTIAL: 'partial',              // In-flight partial translations (10GB, 1h TTL)
-  SYNC: 'sync',                    // Synced subtitles (50GB)
+  TRANSLATION: 'translation',      // Permanent translation cache
+  BYPASS: 'bypass',                // Temporary user-scoped cache (12h TTL)
+  PARTIAL: 'partial',              // In-flight partial translations (1h TTL)
+  SYNC: 'sync',                    // Synced subtitles
   AUTOSUB: 'autosub',              // AutoSubs outputs (separate from manual sync cache)
-  EMBEDDED: 'embedded',            // Extracted/translated embedded subtitles (50GB)
-  SESSION: 'session',              // Session persistence (no limit)
-  HISTORY: 'history',              // Translation history (1GB)
-  PROVIDER_METADATA: 'provider_meta', // Provider-specific metadata (IMDB→movieId, etc.) - shared across users (250MB, 7d TTL)
-  SMDB: 'smdb'                     // SubMaker Database - community-uploaded subtitles (2GB, no TTL, oldest-first LRU)
+  EMBEDDED: 'embedded',            // Extracted/translated embedded subtitles
+  SESSION: 'session',              // Session persistence (hard count cap; optional hard serialized-byte cap)
+  HISTORY: 'history',              // Translation history
+  PROVIDER_METADATA: 'provider_meta', // Provider-specific metadata (IMDB→movieId, etc.)
+  SMDB: 'smdb'                     // SubMaker Database community subtitle cache
 };
 
 // Cache size limits in bytes
-// These limits apply ONLY when using Redis storage (STORAGE_TYPE=redis)
-// For filesystem storage, these are soft limits (enforced by cleanup routines)
+// Redis enforces these limits atomically. Filesystem storage enforces the
+// session limit before writes and treats ordinary cache limits as soft cleanup
+// thresholds.
 //
-// IMPORTANT: Total cache size should be LESS than Redis maxmemory setting
-// Default: 3.5GB total (fits in 4GB Redis with ~0.5GB overhead for Redis internals)
+// Ordinary self-hosted default: 3 GiB total, including a 512 MiB serialized
+// session-payload quota. This leaves 1 GiB of the bundled 4 GiB Redis for
+// metadata/indexes, allocator fragmentation and persistence/replication overhead.
+// ELFHOSTED=true preserves the existing managed-deployment budgets and session
+// byte behavior unless SESSION_STORAGE_MAX_BYTES is explicitly configured.
 //
 // Environment variables to override:
-// - CACHE_LIMIT_TRANSLATION (default: 1.5GB)
-// - CACHE_LIMIT_BYPASS (default: 0.5GB)
-// - CACHE_LIMIT_PARTIAL (default: 0.5GB)
-// - CACHE_LIMIT_SYNC (default: 0.5GB)
-// - CACHE_LIMIT_AUTOSUB (default: 0.5GB)
-// - CACHE_LIMIT_EMBEDDED (default: 0.5GB)
-// - CACHE_LIMIT_HISTORY (default: 1GB)
-// - CACHE_LIMIT_PROVIDER_META (default: 250MB)
-// - CACHE_LIMIT_SMDB (default: 2GB)
+// - SESSION_STORAGE_MAX_BYTES (self-hosted default: 512 MiB; ElfHosted: unset)
+// - CACHE_LIMIT_TRANSLATION (default: 768 MiB)
+// - CACHE_LIMIT_BYPASS (default: 128 MiB)
+// - CACHE_LIMIT_PARTIAL (default: 128 MiB)
+// - CACHE_LIMIT_SYNC (default: 192 MiB)
+// - CACHE_LIMIT_AUTOSUB (default: 192 MiB)
+// - CACHE_LIMIT_EMBEDDED (default: 192 MiB)
+// - CACHE_LIMIT_HISTORY (default: 256 MiB)
+// - CACHE_LIMIT_PROVIDER_META (default: 64 MiB)
+// - CACHE_LIMIT_SMDB (default: 640 MiB)
 //
 // Example for larger deployments:
 // CACHE_LIMIT_TRANSLATION=50000000000 (50GB) - requires Redis with 120GB+ RAM
-StorageAdapter.SIZE_LIMITS = {
-  [StorageAdapter.CACHE_TYPES.TRANSLATION]: parseInt(process.env.CACHE_LIMIT_TRANSLATION) || (1.5 * 1024 * 1024 * 1024), // 1.5GB - was 6GB (for 16GB Redis)
-  [StorageAdapter.CACHE_TYPES.BYPASS]: parseInt(process.env.CACHE_LIMIT_BYPASS) || (0.5 * 1024 * 1024 * 1024),           // 0.5GB - was 2GB (for 16GB Redis)
-  [StorageAdapter.CACHE_TYPES.PARTIAL]: parseInt(process.env.CACHE_LIMIT_PARTIAL) || (0.5 * 1024 * 1024 * 1024),         // 0.5GB - was 2GB (for 16GB Redis)
-  [StorageAdapter.CACHE_TYPES.SYNC]: parseInt(process.env.CACHE_LIMIT_SYNC) || (0.5 * 1024 * 1024 * 1024),               // 0.5GB - was 2GB (for 16GB Redis)
-  [StorageAdapter.CACHE_TYPES.AUTOSUB]: parseInt(process.env.CACHE_LIMIT_AUTOSUB) || (0.5 * 1024 * 1024 * 1024),         // 0.5GB - AutoSubs cache
-  [StorageAdapter.CACHE_TYPES.EMBEDDED]: parseInt(process.env.CACHE_LIMIT_EMBEDDED) || (0.5 * 1024 * 1024 * 1024),       // 0.5GB - mirrors sync cache
-  [StorageAdapter.CACHE_TYPES.SESSION]: null,                                                                             // No limit
-  [StorageAdapter.CACHE_TYPES.HISTORY]: parseInt(process.env.CACHE_LIMIT_HISTORY) || (1024 * 1024 * 1024),               // 1GB default
-  [StorageAdapter.CACHE_TYPES.PROVIDER_METADATA]: parseInt(process.env.CACHE_LIMIT_PROVIDER_META) || (250 * 1024 * 1024), // 250MB default
-  [StorageAdapter.CACHE_TYPES.SMDB]: parseInt(process.env.CACHE_LIMIT_SMDB) || (2 * 1024 * 1024 * 1024) // 2GB default - community subtitle uploads
-};
+StorageAdapter.getSizeLimits = resolveSizeLimits;
+StorageAdapter.SIZE_LIMITS = resolveSizeLimits();
 
 // Default TTL in seconds
 StorageAdapter.DEFAULT_TTL = {

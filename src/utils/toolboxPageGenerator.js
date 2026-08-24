@@ -11,6 +11,7 @@ const { resolveHistoryTitle } = require('../handlers/subtitles');
 const { getEffectiveGeminiModel } = require('./config');
 const { getLocalizedLanguageName } = require('./stremioSubtitleDisplay');
 const { streamFilenameSelectorClientScript } = require('./streamUrlIdentity');
+const { serializeJsonForInlineScript } = require('./inlineScriptJson');
 
 function escapeHtml(value) {
   if (value === undefined || value === null) return '';
@@ -25,22 +26,6 @@ function escapeHtml(value) {
 function resolveUiLang(config) {
   const lang = (config && config.uiLanguage) ? String(config.uiLanguage).toLowerCase() : 'en';
   return escapeHtml(lang || 'en');
-}
-
-/**
- * Safely serialize JavaScript object for embedding in <script> tags
- * Prevents XSS by escaping HTML special characters that could break out of script context
- * Uses double-encoding to ensure JSON.parse() can safely reconstruct the object
- * @param {*} obj - Object to serialize
- * @returns {string} - Safe JavaScript code to parse the object
- */
-function safeJsonSerialize(obj) {
-  // First JSON.stringify to get JSON string
-  const jsonString = JSON.stringify(obj);
-  // Second JSON.stringify to escape it for embedding in JavaScript
-  // This prevents </script> tag injection and other escaping issues
-  const doubleEncoded = JSON.stringify(jsonString);
-  return `JSON.parse(${doubleEncoded})`;
 }
 
 function formatLanguageLabel(code, fallback) {
@@ -1821,17 +1806,17 @@ function generateSubToolboxPage(configStr, videoId, filename, config) {
   <script src="/js/subtitle-studio.js?v=${escapeHtml(appVersion || 'dev')}&_cb=${escapeHtml(appVersion || 'dev')}"></script>
   <script src="/js/subtitle-menu.js?v=${escapeHtml(appVersion || 'dev')}&_cb=${escapeHtml(appVersion || 'dev')}"></script>
   <script>
-    const TOOLBOX = ${safeJsonSerialize({
+    const TOOLBOX = ${serializeJsonForInlineScript({
     configStr,
     videoId,
     filename: filename || '',
     videoHash
   })};
-    const SUBTITLE_MENU_TARGETS = ${JSON.stringify(subtitleMenuTargets)};
-    const SUBTITLE_MENU_SOURCES = ${JSON.stringify(config.sourceLanguages || [])};
-    const SUBTITLE_MENU_TARGET_CODES = ${JSON.stringify(config.targetLanguages || [])};
-    const SUBTITLE_LANGUAGE_MAPS = ${safeJsonSerialize(languageMaps)};
-    const STUDIO_COPY = ${safeJsonSerialize({
+    const SUBTITLE_MENU_TARGETS = ${serializeJsonForInlineScript(subtitleMenuTargets)};
+    const SUBTITLE_MENU_SOURCES = ${serializeJsonForInlineScript(config.sourceLanguages || [])};
+    const SUBTITLE_MENU_TARGET_CODES = ${serializeJsonForInlineScript(config.targetLanguages || [])};
+    const SUBTITLE_LANGUAGE_MAPS = ${serializeJsonForInlineScript(languageMaps)};
+    const STUDIO_COPY = ${serializeJsonForInlineScript({
       loaded: t('toolbox.studio.status.loaded', { name: '{name}' }, 'Loaded {name}'),
       repaired: t('toolbox.studio.status.repaired', {}, 'SRT repaired and normalized.'),
       shifted: t('toolbox.studio.status.shifted', { amount: '{amount}' }, 'Timing shifted by {amount} ms.'),
@@ -1928,7 +1913,7 @@ function generateSubToolboxPage(configStr, videoId, filename, config) {
         document.getElementById('studioCharacterCount').textContent = String(editor.value.length);
         const summary = document.getElementById('studioDiagnosticSummary');
         if (!editor.value.trim()) {
-          summary.textContent = ${JSON.stringify(t('toolbox.studio.diagnostics.empty', {}, 'Load or paste an SRT to start checking it.'))};
+          summary.textContent = ${serializeJsonForInlineScript(t('toolbox.studio.diagnostics.empty', {}, 'Load or paste an SRT to start checking it.'))};
         } else if (report.issueCount === 0) {
           summary.textContent = STUDIO_COPY.noIssues;
         } else {
@@ -2245,7 +2230,7 @@ function generateSubToolboxPage(configStr, videoId, filename, config) {
       let pingAttempts = 0;
       const MAX_PINGS = 5;
       const EXT_INSTALL_URL = 'https://chromewebstore.google.com/detail/submaker-xsync/lpocanpndchjkkpgchefobjionncknjn';
-      const REQUIRED_XSYNC_VERSION = ${JSON.stringify(REQUIRED_XSYNC_VERSION)};
+      const REQUIRED_XSYNC_VERSION = ${serializeJsonForInlineScript(REQUIRED_XSYNC_VERSION)};
       const VERSION_WARNING_TEMPLATE = window.t
         ? window.t(
           'toolbox.extension.versionOutdated',
@@ -4070,7 +4055,7 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
     if (window.ComboBox && typeof window.ComboBox.enhanceAll === 'function') {
       window.ComboBox.enhanceAll(document);
     }
-    const BOOTSTRAP = ${safeJsonSerialize(bootstrap)};
+    const BOOTSTRAP = ${serializeJsonForInlineScript(bootstrap)};
     const PAGE = { configStr: BOOTSTRAP.configStr, videoId: BOOTSTRAP.videoId, filename: BOOTSTRAP.filename || '', videoHash: BOOTSTRAP.videoHash || '' };
     const tt = (key, vars = {}, fallback = '') => window.t ? window.t(key, vars, fallback || key) : (fallback || key);
     const metaCopy = BOOTSTRAP.strings?.videoMeta || {};
@@ -4091,7 +4076,7 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
     const hashMismatchStrings = BOOTSTRAP.strings?.hashMismatch || {};
     const lockCopy = BOOTSTRAP.strings?.locks || {};
     const reloadHints = BOOTSTRAP.strings?.reloadHints || {};
-    const HASH_ALERT_DEFAULTS = ${JSON.stringify(hashAlertLines)};
+    const HASH_ALERT_DEFAULTS = ${serializeJsonForInlineScript(hashAlertLines)};
     const HASH_MISMATCH_LINES = Array.isArray(hashMismatchStrings.alertLines) && hashMismatchStrings.alertLines.length
       ? hashMismatchStrings.alertLines.filter(Boolean)
       : (HASH_ALERT_DEFAULTS.length
@@ -4851,7 +4836,7 @@ async function generateEmbeddedSubtitlePage(configStr, videoId, filename) {
       el.removeAttribute('inert');
     }
     const EXT_INSTALL_URL = 'https://chromewebstore.google.com/detail/submaker-xsync/lpocanpndchjkkpgchefobjionncknjn';
-    const REQUIRED_XSYNC_VERSION = ${JSON.stringify(REQUIRED_XSYNC_VERSION)};
+    const REQUIRED_XSYNC_VERSION = ${serializeJsonForInlineScript(REQUIRED_XSYNC_VERSION)};
     const VERSION_WARNING_TEMPLATE = tt(
       'toolbox.extension.versionOutdated',
       { detected: '{detected}', required: '{required}' },
@@ -6971,6 +6956,7 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
         liveLogSource: null,
         liveLogPoll: null,
         liveLogJobId: null,
+        liveLogToken: null,
         audioTracks: [],
         selectedAudioTrack: null,
         awaitingTrackChoice: false,
@@ -7523,6 +7509,7 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
           state.liveLogPoll = null;
         }
         state.liveLogJobId = null;
+        state.liveLogToken = null;
       }
 
       function handleServerLogEntry(entry) {
@@ -7544,12 +7531,12 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
         logs.forEach((entry) => handleServerLogEntry(entry));
       }
 
-      function startAssemblyLogPoll(jobId) {
-        if (!jobId) return () => { };
+      function startAssemblyLogPoll(jobId, logToken) {
+        if (!jobId || !logToken) return () => { };
         if (state.liveLogPoll) clearInterval(state.liveLogPoll);
         const poll = async () => {
           try {
-            const resp = await fetch('/api/auto-subtitles/logs?jobId=' + encodeURIComponent(jobId) + '&format=json&since=' + encodeURIComponent(state.lastServerLogTs || ''), { cache: 'no-store' });
+            const resp = await fetch('/api/auto-subtitles/logs?jobId=' + encodeURIComponent(jobId) + '&logToken=' + encodeURIComponent(logToken) + '&format=json&since=' + encodeURIComponent(state.lastServerLogTs || ''), { cache: 'no-store' });
             if (!resp.ok) return;
             const data = await resp.json().catch(() => null);
             if (data && Array.isArray(data.logs)) {
@@ -7568,12 +7555,13 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
         };
       }
 
-      function startAssemblyLiveLogStream(jobId) {
+      function startAssemblyLiveLogStream(jobId, logToken) {
         stopAssemblyLiveLogs();
-        if (!jobId) return () => { };
+        if (!jobId || !logToken) return () => { };
         state.liveLogJobId = jobId;
+        state.liveLogToken = logToken;
         if (typeof EventSource === 'function') {
-          const source = new EventSource('/api/auto-subtitles/logs?jobId=' + encodeURIComponent(jobId) + '&replay=0');
+          const source = new EventSource('/api/auto-subtitles/logs?jobId=' + encodeURIComponent(jobId) + '&logToken=' + encodeURIComponent(logToken));
           state.liveLogSource = source;
           source.onmessage = (event) => {
             try {
@@ -7586,12 +7574,24 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
           });
           source.onerror = () => {
             stopAssemblyLiveLogs();
-            startAssemblyLogPoll(jobId);
+            startAssemblyLogPoll(jobId, logToken);
           };
           return () => stopAssemblyLiveLogs();
         }
-        startAssemblyLogPoll(jobId);
+        startAssemblyLogPoll(jobId, logToken);
         return () => stopAssemblyLiveLogs();
+      }
+
+      function createAutoSubLogToken() {
+        try {
+          const bytes = new Uint8Array(16);
+          window.crypto.getRandomValues(bytes);
+          return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+        } catch (_) {
+          // Live logs are optional. Older webviews without Web Crypto still run
+          // the subtitle job and receive the final logTrail in its JSON response.
+          return '';
+        }
       }
 
       function clearLog() {
@@ -8454,6 +8454,10 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
           }
           payload.transcript = transcriptPayload;
         }
+        if (overrides.jobId && overrides.logToken) {
+          payload.jobId = String(overrides.jobId);
+          payload.logToken = String(overrides.logToken);
+        }
 
         const resp = await fetch('/api/auto-subtitles/run', {
           method: 'POST',
@@ -8720,13 +8724,18 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
         setPillLabel('fetch', fetchLabel);
         setProgress(8);
 
-        const assemblyJobId = isAssembly ? ('autosub_' + Date.now() + '_' + Math.random().toString(16).slice(2, 10)) : '';
+        const assemblyJobNonce = isAssembly ? createAutoSubLogToken() : '';
+        const assemblyLogToken = isAssembly ? createAutoSubLogToken() : '';
+        // The timestamp fallback is used only to correlate extension messages;
+        // live logging remains disabled unless both 128-bit values were created.
+        const assemblyJobId = isAssembly
+          ? (assemblyJobNonce ? ('autosub_' + assemblyJobNonce) : ('autosub_' + Date.now()))
+          : '';
         let transcript = null;
         let serverLogs = [];
         let stopLiveLogs = () => { };
         try {
           if (isAssembly) {
-            stopLiveLogs = startAssemblyLiveLogStream(assemblyJobId);
             markStep('fetch', 'warn');
             markStep('transcribe', 'warn');
             const messageId = assemblyJobId || ('autosub_' + Date.now());
@@ -8770,13 +8779,18 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
             setPreview(transcript.srt || '');
             setStatus(tt('toolbox.autoSubs.status.transcriptionDone', {}, 'Transcription complete. Preparing downloads...'));
 
-            const { resp, data } = await submitTranscriptToServer(transcript, stream, targets, translateEnabled, {
+            const submission = submitTranscriptToServer(transcript, stream, targets, translateEnabled, {
               engine: 'assemblyai',
               assemblySpeechModel,
               sendFullVideo: els.assemblySendFullVideo?.checked === true,
               diarization: true,
-              jobId: assemblyJobId
+              jobId: assemblyJobId,
+              logToken: assemblyLogToken
             });
+            // Start streaming only once the authenticated server request is in
+            // flight; polling handles the brief channel-reservation race.
+            stopLiveLogs = startAssemblyLiveLogStream(assemblyJobId, assemblyLogToken);
+            const { resp, data } = await submission;
             serverLogs = Array.isArray(data?.logTrail) ? data.logTrail : [];
             if (!resp.ok || data.success !== true) {
               const msg = data?.error || data?.message || data?.details || `Request failed (${resp.status})`;
@@ -10677,7 +10691,7 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
   <script src="/js/combobox.js?_cb=${escapeHtml(appVersion || 'dev')}"></script>
   <script>
     ${quickNavScript()}
-    const BOOTSTRAP = ${safeJsonSerialize({
+    const BOOTSTRAP = ${serializeJsonForInlineScript({
     configStr,
     videoId,
     filename: filename || '',
@@ -10693,23 +10707,23 @@ async function generateAutoSubtitlePage(configStr, videoId, filename, config = {
     assemblyApiKey
   })};
     const PAGE = { configStr: BOOTSTRAP.configStr, videoId: BOOTSTRAP.videoId, filename: BOOTSTRAP.filename || '', videoHash: BOOTSTRAP.videoHash || '' };
-    const SUBTITLE_MENU_TARGETS = ${JSON.stringify(subtitleMenuTargets)};
-    const SUBTITLE_MENU_SOURCES = ${JSON.stringify(config.sourceLanguages || [])};
-    const SUBTITLE_MENU_TARGET_CODES = ${JSON.stringify(config.targetLanguages || [])};
-    const SUBTITLE_LANGUAGE_MAPS = ${safeJsonSerialize(languageMaps)};
+    const SUBTITLE_MENU_TARGETS = ${serializeJsonForInlineScript(subtitleMenuTargets)};
+    const SUBTITLE_MENU_SOURCES = ${serializeJsonForInlineScript(config.sourceLanguages || [])};
+    const SUBTITLE_MENU_TARGET_CODES = ${serializeJsonForInlineScript(config.targetLanguages || [])};
+    const SUBTITLE_LANGUAGE_MAPS = ${serializeJsonForInlineScript(languageMaps)};
     let subtitleMenuInstance = null;
     let pendingStreamUpdate = null;
     const tt = (key, vars = {}, fallback = '') => window.t ? window.t(key, vars, fallback || key) : (fallback || key);
-    const TOAST_TITLE_FALLBACK = ${JSON.stringify(t('toolbox.toast.title', {}, 'New stream detected'))};
+    const TOAST_TITLE_FALLBACK = ${serializeJsonForInlineScript(t('toolbox.toast.title', {}, 'New stream detected'))};
     const REFRESH_LABEL_FALLBACKS = {
-      loading: ${JSON.stringify(t('toolbox.refresh.loading', {}, 'Refreshing...'))},
-      empty: ${JSON.stringify(t('toolbox.refresh.empty', {}, 'No stream yet'))},
-      error: ${JSON.stringify(t('toolbox.refresh.error', {}, 'Refresh failed'))},
-      current: ${JSON.stringify(t('toolbox.refresh.current', {}, 'Already latest'))}
+      loading: ${serializeJsonForInlineScript(t('toolbox.refresh.loading', {}, 'Refreshing...'))},
+      empty: ${serializeJsonForInlineScript(t('toolbox.refresh.empty', {}, 'No stream yet'))},
+      error: ${serializeJsonForInlineScript(t('toolbox.refresh.error', {}, 'Refresh failed'))},
+      current: ${serializeJsonForInlineScript(t('toolbox.refresh.current', {}, 'Already latest'))}
     };
 
-    window.__SUBMAKER_REQUIRED_XSYNC_VERSION = ${JSON.stringify(REQUIRED_XSYNC_VERSION)};
-    const copy = ${safeJsonSerialize(copy)};
+    window.__SUBMAKER_REQUIRED_XSYNC_VERSION = ${serializeJsonForInlineScript(REQUIRED_XSYNC_VERSION)};
+    const copy = ${serializeJsonForInlineScript(copy)};
     ${streamFilenameSelectorClientScript()}
     (${autoSubsRuntime.toString()})(copy, selectStreamFilename);
 

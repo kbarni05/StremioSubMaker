@@ -46,7 +46,7 @@ test('Gemini 3 request uses structured JSON, qualitative thinking and final-only
   try {
     const result = await gemini.translateSubtitle('[{"id":1,"text":"Hello!"}]', 'English', 'Hungarian');
     assert.equal(result, '[{"id":1,"text":"Szia!"}]');
-    assert.deepEqual(capturedBody.generationConfig.thinkingConfig, { thinkingLevel: 'low' });
+    assert.deepEqual(capturedBody.generationConfig.thinkingConfig, { thinkingLevel: 'minimal' });
     assert.equal(capturedBody.generationConfig.responseMimeType, 'application/json');
     assert.equal(capturedBody.generationConfig.responseSchema.type, 'ARRAY');
     assert.equal('temperature' in capturedBody.generationConfig, false);

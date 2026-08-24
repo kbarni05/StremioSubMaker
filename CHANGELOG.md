@@ -6,6 +6,39 @@ All notable changes to this project will be documented in this file.
 
 No changes yet.
 
+## SubMaker v1.9.0
+
+**Improvements:**
+
+- Merged upstream v1.4.92, v1.4.93 and v1.4.94 while retaining the fork's
+  Hungarian UI, mobile delivery, Operations Center, diagnostics and Subtitle Studio.
+- Stremio subtitle variants now stay grouped by language and show a useful
+  source/file label inside the selected language instead of repeated names.
+- The configuration page paints immediately, loads saved state in the background,
+  caches versioned assets and no longer waits on a loader waterfall or large emoji font.
+- Gemini requests identify the installed SubMaker version and optionally retry once
+  through a trusted HTTPS fallback only when Google rejects the server location.
+
+**Bug Fixes:**
+
+- Gemini validation now separates invalid credentials, unsupported server regions,
+  quotas, malformed requests and transient upstream failures without poisoning the
+  authentication cache; explicit validation always rechecks a stale key.
+- Added bounded model discovery, response sizes, concurrency, retries and shared
+  model-limit caching while preserving current Gemini 3.x thinking-level profiles.
+- Fixed persisted Cloudflare credentials, hard non-evicting session capacity,
+  concurrency-safe Redis quotas and protected AutoSubs live-log channels.
+- Hardened every remote subtitle download and redirect against SSRF, DNS rebinding,
+  private networks, oversized responses and archive expansion bombs.
+- Server-generated pages now use centralized script-safe JSON serialization.
+
+**Security:**
+
+- OpenSubtitles V3 and Wyzie download identifiers are authenticated opaque tokens;
+  unsigned legacy URL identifiers are rejected by default.
+- Custom AI endpoints receive canonical IPv4/IPv6 validation plus global and per-host
+  request ceilings, including safe redirect and connection-time DNS checks.
+
 ## SubMaker v1.8.2
 
 **Bug Fixes:**

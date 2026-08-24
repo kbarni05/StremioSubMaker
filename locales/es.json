@@ -37,6 +37,7 @@
     "server": {
       "errors": {
         "storageUnavailable": "Almacenamiento de sesión temporalmente no disponible, inténtalo de nuevo.",
+        "sessionCapacityReached": "Se alcanzó la capacidad de almacenamiento de sesiones. No se eliminó ninguna sesión existente; contacta con el operador del servidor.",
         "configPayloadTooLarge": "La carga de configuración es demasiado grande",
         "originNotAllowed": "Origen no permitido",
         "stremioOnly": "Acceso denegado. Este addon debe usarse desde Stremio.",
@@ -51,6 +52,22 @@
         "apiKeyRequired": "La clave API es obligatoria",
         "invalidSessionToken": "Token de sesión no válido o expirado",
         "modelsFailed": "Error al obtener los modelos: {reason}",
+        "baseUrlRequired": "La URL base es obligatoria para el proveedor personalizado",
+        "customProviderModelRequired": "El modelo es obligatorio para el proveedor personalizado",
+        "customProviderFieldsTooLong": "La configuración del proveedor personalizado contiene un campo demasiado largo",
+        "customProviderModelInvalid": "El modelo del proveedor personalizado contiene caracteres no válidos",
+        "customProviderApiKeyInvalid": "La clave API del proveedor personalizado contiene caracteres no válidos",
+        "customProviderUnavailable": "No se pudo inicializar la configuración del proveedor personalizado",
+        "customProviderAuthFailed": "Error de autenticación. Comprueba la clave API del proveedor personalizado.",
+        "customProviderNotFound": "No se encontró la URL base o el modelo del proveedor personalizado.",
+        "customProviderRejected": "El proveedor rechazó la solicitud de prueba. Comprueba la URL base y el modelo.",
+        "customProviderRateLimited": "El proveedor personalizado está limitando las solicitudes. Inténtalo más tarde.",
+        "customProviderServerError": "El proveedor personalizado devolvió un error del servidor.",
+        "customProviderTimeout": "La prueba del proveedor personalizado agotó el tiempo de espera.",
+        "customProviderDnsFailed": "No se pudo resolver el nombre de host del proveedor personalizado.",
+        "customProviderConnectionFailed": "No se pudo conectar con el proveedor personalizado.",
+        "customProviderBlocked": "El endpoint del proveedor personalizado fue bloqueado por la política de seguridad del servidor.",
+        "customProviderTestFailed": "No se pudo validar la configuración del proveedor personalizado.",
         "cloudflareTokenRequired": "Se requiere el token de Cloudflare Workers AI",
         "cloudflareAccountRequired": "Se requiere el ID de cuenta de Cloudflare Workers AI. Usa ACCOUNT_ID|TOKEN.",
         "cloudflareCredentialsMissing": "Faltan credenciales de Cloudflare Workers AI. Usa ACCOUNT_ID|TOKEN.",
@@ -59,6 +76,8 @@
         "invalidApiKeyAuth": "Clave API no válida: autenticación fallida",
         "requestFailed": "La solicitud falló",
         "invalidApiKey": "Clave API no válida",
+        "geminiUnsupportedLocation": "Gemini rechazó la ubicación de red de este servidor. La clave API aún puede ser válida; el host debe usar una salida de red apta para Gemini y, cuando Google lo exija, acceso de pago a la API de Gemini.",
+        "geminiRequestRejected": "Gemini rechazó la solicitud: {reason}",
         "usernamePasswordRequired": "Se requieren usuario y contraseña",
         "noTokenReceived": "No se recibió token; las credenciales pueden ser inválidas",
         "invalidCredentials": "Usuario o contraseña incorrectos",
@@ -131,7 +150,8 @@
         "apiError": "Error de API: {reason}",
         "apiKeyValid": "La clave API es válida",
         "apiKeyAppearsValid": "La clave API parece válida",
-        "credentialsValid": "Las credenciales son válidas"
+        "credentialsValid": "Las credenciales son válidas",
+        "customProviderValid": "La configuración del proveedor personalizado es válida"
       },
       "sync": {
         "saveSuccess": "Subtítulo sincronizado guardado correctamente"
@@ -139,6 +159,7 @@
     },
     "apiErrors": {
       "geminiRateLimit": "Se alcanzó el límite de uso de Gemini. Revisa el uso/cuota de tu API key o usa otra clave.",
+      "geminiUnsupportedLocation": "Gemini rechazó la ubicación de red de este servidor. La clave API aún puede ser válida; pide al host una salida apta para Gemini y acceso de pago cuando sea obligatorio.",
       "rateLimit": "Límite de {service} excedido. Espera unos minutos y vuelve a intentar.",
       "serviceUnavailable": "{service} no disponible temporalmente. Intenta de nuevo en unos minutos.",
       "databaseUnavailable": "La base de datos de subtítulos no está disponible temporalmente. Probando el siguiente subtítulo...",
@@ -608,6 +629,7 @@
       "translationFailed": "La traducción falló",
       "translationUnexpected": "Ocurrió un error inesperado durante la traducción.",
       "translationRetry": "Error inesperado.\\nHaz clic en este subtítulo para reintentar.",
+      "translationGeminiLocation": "Traducción fallida: Gemini rechazó la ubicación del servidor",
       "translationAuth": "Traducción fallida: error de autenticación (403)",
       "translationAuthBody": "Tu clave de Gemini es inválida o fue rechazada.\\nVerifica que sea correcta.",
       "translationAuthRetry": "Actualiza tu clave de Gemini en la configuración,\\nluego reinstala el addon y vuelve a intentar.",
@@ -636,6 +658,8 @@
       "osAuthMissingRateLimited": "El modo de OpenSubtitles con usuario/contraseña está activo sin credenciales, así que se aplica el límite básico. Añade usuario/contraseña o cambia a V3 (sin login).",
       "providerRateLimitTitle": "Límite de {service} alcanzado (429)",
       "providerRateLimitBody": "Demasiadas solicitudes en poco tiempo. Espera unos minutos y vuelve a intentar.",
+      "subdlDownloadQuotaTitle": "Cuota de descargas de SubDL alcanzada (429)",
+      "subdlDownloadQuotaBody": "Esta clave de API de SubDL no puede descargar más archivos ahora mismo.\\nRevisa su uso en SubDL, espera a que se restablezca la cuota, usa otra clave o plan, o elige otro proveedor.",
       "providerAuthErrorTitle": "Error de autenticación",
       "providerAuthErrorBody": "{service} rechazó tu clave o credenciales",
       "notAvailableTitle": "Subtítulo no disponible (Error 404)",
@@ -760,7 +784,7 @@
       },
       "footer": {
         "love": "Hecho con <span class=\"footer-heart\">❤️</span> para usuarios de Stremio en todas partes",
-        "thanks": "¡Gracias por usar SubMaker! Tu apoyo ayuda a que el contenido sea accesible para todos."
+        "thanks": "Ayuda a mantener mejores subtítulos accesibles <a href=\"https://xtremexq.github.io/StremioSubMaker/support/\" target=\"_blank\" rel=\"noreferrer\">apoyando el proyecto</a>. ¡Cualquier cantidad ayuda!"
       },
       "quickSetup": {
         "title": "Configuración rápida",
@@ -811,11 +835,10 @@
           "scsKeyNote": "Usa tu propia clave Auth de SCS para peticiones más rápidas filtradas por idioma.",
           "scsModeNote": "El modo Community usa el token compartido de SubMaker; Auth envía solo tus idiomas seleccionados.",
           "wyzieName": "Wyzie Subs",
-          "wyzieDesc": "Agregador de subtítulos con clave API gratuita",
+          "wyzieDesc": "Agregador que busca en todas las fuentes disponibles para tu clave API",
           "wyzieKeyPlaceholder": "Introduce la clave API de Wyzie",
-          "wyzieGetKey": "Obtén tu clave API gratuita en sub.wyzie.io/redeem",
-          "wyzieSources": "Fuentes:",
-          "wyzieMoreSources": "Más fuentes = más subtítulos pero más lento"
+          "wyzieGetKey": "Obtén tu clave API gratuita en store.wyzie.io/redeem",
+          "wyzieAutoSources": "Wyzie busca automáticamente en todas las fuentes actuales disponibles para el plan de tu clave API."
         },
         "step3": {
           "title": "Traducción con IA",
@@ -894,7 +917,7 @@
           "disabled": "Deshabilitado",
           "scsAuth": "Clave Auth",
           "scsCommunity": "Token comunitario",
-          "wyzieSources": "Habilitado ({count} fuentes)",
+          "wyzieSources": "Todas las fuentes disponibles",
           "aiTranslation": "Traducción con IA",
           "aiConfigured": "{model}",
           "aiNotConfigured": "No configurado",
@@ -1077,7 +1100,10 @@
         "geminiKeysRequired": "Se requiere al menos una clave API para la rotación",
         "geminiKeysFillEmpty": "Completa todos los campos de clave API antes de añadir una nueva",
         "apiKeyInvalid": "Clave API inválida",
-        "apiError": "Error de API: {reason}"
+        "apiError": "Error de API: {reason}",
+        "customProviderModelRequired": "Introduce un modelo para el proveedor personalizado",
+        "customProviderValid": "La configuración del proveedor personalizado es válida",
+        "customProviderTestFailed": "No se pudo validar la configuración del proveedor personalizado"
       },
       "alerts": {
         "sessionLost": "Se perdió la sesión de configuración. Vuelve a configurar y guarda para crear una nueva sesión.",
@@ -1139,12 +1165,12 @@
         "wyzie": {
           "title": "Wyzie Subs",
           "description": "Obtén tu clave API gratuita en",
-          "linkLabel": "sub.wyzie.io/redeem",
+          "linkLabel": "store.wyzie.io/redeem",
           "placeholder": "Introduce la clave API de Wyzie",
           "validateTitle": "Validar clave API",
           "validateCta": "Probar",
           "toggleLabel": "Activar Wyzie Subs",
-          "note": "Wyzie agrega subtítulos de múltiples fuentes. Los resultados pueden superponerse con otros proveedores que tengas habilitados."
+          "note": "Wyzie busca automáticamente en todas las fuentes actuales disponibles para el plan de tu clave API. Los resultados pueden superponerse con otros proveedores habilitados."
         },
         "scs": {
           "title": "Stremio Community Subtitles",
@@ -1208,7 +1234,7 @@
         "googleWeb": "web (fijo)",
         "googleHint": "Usa el endpoint público de Google Translate (puede ser inestable).",
         "testConnection": "Probar conexión",
-        "customHint": "Para Ollama, LM Studio, LocalAI o cualquier API compatible con OpenAI. Deja la clave vacía si no es necesaria.",
+        "customHint": "Para Ollama, LM Studio, LocalAI o cualquier API compatible con OpenAI. Deja la clave vacía si no es necesaria. La prueba envía una solicitud pequeña.",
         "title": "AI Translation API Keys",
         "apiKey": {
           "label": "Gemini API Key",
@@ -1228,7 +1254,12 @@
             "gemma27b": "Gemma 27b (beta) (Recommended for Rate Limits)",
             "flashLite": "Gemini 2.5 Flash-Lite",
             "flash": "Gemini 2.5 Flash",
+            "flashLite31": "Gemini 3.1 Flash Lite",
             "flash3": "Gemini 3.0 Flash (beta)",
+            "flashLite35": "Gemini 3.5 Flash-Lite (beta)",
+            "flash35": "Gemini 3.5 Flash (beta)",
+            "flash36": "Gemini 3.6 Flash (beta)",
+            "flash37": "Gemini 3.7 Flash (beta)",
             "pro": "Gemini 2.5 Pro (beta)",
             "pro3": "Gemini 3.0 Pro (beta)"
           },
@@ -1399,6 +1430,15 @@
         "thinking": {
           "label": "Thinking Budget (razonamiento extendido)",
           "description": "0 = desactivado, -1 = dinámico (autoajuste) o un total fijo (1-32768). Valores altos = más razonamiento pero más lentos."
+        },
+        "thinkingLevel": {
+          "label": "Nivel de razonamiento",
+          "description": "Controla el razonamiento de Gemini 3.x. Mínimo es la opción compatible más cercana a desactivado.",
+          "disabled": "Desactivado (opción más cercana)",
+          "minimal": "Mínimo",
+          "low": "Bajo",
+          "medium": "Medio",
+          "high": "Alto"
         },
         "temperature": {
           "label": "Temperatura (creatividad)",
@@ -1571,6 +1611,15 @@
         "thinking": {
           "label": "Presupuesto de razonamiento (Thinking)",
           "helper": "0 = desactivado, -1 = dinámico (auto), o valor fijo (1-32768)."
+        },
+        "thinkingLevel": {
+          "label": "Nivel de razonamiento",
+          "helper": "Controla el razonamiento de Gemini 3.x. Mínimo es la opción compatible más cercana a desactivado.",
+          "disabled": "Desactivado (opción más cercana)",
+          "minimal": "Mínimo",
+          "low": "Bajo",
+          "medium": "Medio",
+          "high": "Alto"
         },
         "temperature": {
           "label": "Temperatura (creatividad)",

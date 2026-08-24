@@ -50,6 +50,7 @@ const { redactToken, sanitizeApiKeyForHeader } = require('./src/utils/security')
 const { getAllLanguages, getAllTranslationLanguages, getLanguageName, toISO6392, findISO6391ByName, canonicalSyncLanguageCode } = require('./src/utils/languages');
 const { generateCacheKeys } = require('./src/utils/cacheKeys');
 const { getCached: getDownloadCached, saveCached: saveDownloadCached, getCacheStats: getDownloadCacheStats } = require('./src/utils/downloadCache');
+const { checkOpenSubtitlesDownloadIntent } = require('./src/utils/openSubtitlesDownloadGuard');
 const { createSubtitleHandler, handleSubtitleDownload, handleTranslation, createLoadingSubtitle, createSessionTokenErrorSubtitle, createOpenSubtitlesAuthErrorSubtitle, createOpenSubtitlesQuotaExceededSubtitle, createCredentialDecryptionErrorSubtitle, createTranslationErrorSubtitle, readFromPartialCache, hasCachedTranslation, purgeTranslationCache, translationStatus, inFlightTranslations, canUserStartTranslation, getHistoryForUser, migrateHistoryNamespace, resolveHistoryUserHash, saveRequestToHistory, resolveHistoryTitle, enrichHistoryEntriesBackground, maybeConvertToSRT, isSharedTranslationInFlight, getTranslationCacheMetrics } = require('./src/handlers/subtitles');
 const GeminiService = require('./src/services/gemini');
 const TranslationEngine = require('./src/services/translationEngine');
@@ -61,6 +62,7 @@ const syncCache = require('./src/utils/syncCache');
 const autoSubCache = require('./src/utils/autoSubCache');
 const { warmUpConnections, startKeepAlivePings, stopKeepAlivePings, getPoolStats } = require('./src/utils/httpAgents');
 const embeddedCache = require('./src/utils/embeddedCache');
+const { AutoSubLogRegistry } = require('./src/utils/autoSubLogRegistry');
 const { detectEmbeddedSubtitleFormat, prepareEmbeddedSubtitleDelivery } = require('./src/utils/embeddedSubtitleDelivery');
 const { buildEmbeddedHistoryContext, normalizeEmbeddedHistoryValue } = require('./src/utils/embeddedHistoryContext');
 const { generateSubtitleSyncPage } = require('./src/utils/syncPageGenerator');
@@ -93,10 +95,12 @@ const {
     validateInput
 } = require('./src/utils/validation');
 const { MAX_SESSION_BRIEF_BATCH, getSessionManager, stripInternalFlags } = require('./src/utils/sessionManager');
+const { findEncryptedSensitiveInputPaths } = require('./src/utils/encryption');
 const { runStartupValidation } = require('./src/utils/startupValidation');
-const { StorageUnavailableError } = require('./src/storage/errors');
+const { SessionCapacityError, StorageUnavailableError } = require('./src/storage/errors');
 const { StorageAdapter, getStorageAdapter } = require('./src/storage');
 const { createRateLimitRedisStore } = require('./src/utils/rateLimitRedisStore');
+const { OutboundConcurrencyLimiter } = require('./src/utils/outboundConcurrencyLimiter');
 const { isBlockedCommunityV5Request, isStremioKaiRequest } = require('./src/utils/stremioClientIdentity');
 const { loadLocale, getTranslator, DEFAULT_LANG } = require('./src/utils/i18n');
 const { incrementCounter, CACHE_PREFIXES, CACHE_TTLS } = require('./src/utils/sharedCache');
@@ -106,6 +110,26 @@ const { loadChangelog } = require('./src/utils/changelog');
 // Default to current package version so it auto-advances on releases
 const CACHE_BUSTER_VERSION = process.env.CACHE_BUSTER_VERSION || version;
 const CACHE_BUSTER_PATH = `/v${CACHE_BUSTER_VERSION}`;
+const CONFIG_UI_VERSIONED_ASSET_PATHS = new Set([
+    '/config.js',
+    '/css/configure.css',
+    '/css/combobox.css',
+    '/css/quick-setup.css',
+    '/js/init.js',
+    '/js/combobox.js',
+    '/js/combobox-init.js',
+    '/js/config-page-state.js',
+    '/js/config-loader.js',
+    '/js/theme-toggle.js',
+    '/js/sw-register.js',
+    '/js/quick-setup.js',
+    '/js/subtitle-menu.js',
+    '/partials/main.html',
+    '/partials/footer.html',
+    '/partials/overlays.html',
+    '/partials/quick-setup.html',
+    '/fonts/Twemoji.ttf'
+]);
 
 log.info(() => `[Startup] Cache buster active: ${CACHE_BUSTER_PATH}`);
 
@@ -170,12 +194,18 @@ function normalizeSubtitleQueryExtras(req) {
 
 // Initialize session manager with environment-based configuration
 // Memory limit: 30,000 sessions (LRU eviction) - reduced from 50k to balance memory usage
-// Storage limit: 60,000 sessions (oldest-accessed purge at 90 days) - new cap to prevent unbounded growth
+// Storage limits: 60,000 sessions everywhere and, for bundled self-hosters,
+// 512 MiB of serialized payloads. ElfHosted keeps its existing byte profile
+// unless SESSION_STORAGE_MAX_BYTES is explicitly configured.
 const sessionOptions = {
     maxSessions: parseInt(process.env.SESSION_MAX_SESSIONS) || 30000, // Limit to 30k concurrent in-memory sessions
     maxAge: parseInt(process.env.SESSION_MAX_AGE) || 90 * 24 * 60 * 60 * 1000, // 90 days (3 months)
     persistencePath: process.env.SESSION_PERSISTENCE_PATH || path.join(process.cwd(), 'data', 'sessions.json'),
     storageMaxSessions: parseInt(process.env.SESSION_STORAGE_MAX_SESSIONS) || 60000, // Limit to 60k sessions in storage
+    storageMaxBytes: parsePositiveIntEnv(
+        'SESSION_STORAGE_MAX_BYTES',
+        process.env.ELFHOSTED === 'true' ? null : 512 * 1024 * 1024
+    ),
     storageMaxAge: parseInt(process.env.SESSION_STORAGE_MAX_AGE) || 90 * 24 * 60 * 60 * 1000 // 90 days storage retention
 };
 // Only override autoSaveInterval if explicitly provided via env; otherwise let SessionManager default apply
@@ -222,6 +252,14 @@ const missingSessionTokenCache = new LRUCache({
     updateAgeOnGet: true
 });
 
+// Custom providers can point at any SSRF-safe endpoint, so bound live sockets
+// independently of the IP rate limiter. Rejections are immediate rather than
+// queued, preventing a request backlog from becoming another memory sink.
+const customEndpointConcurrencyLimiter = new OutboundConcurrencyLimiter({
+    maxGlobal: parsePositiveIntEnv('CUSTOM_ENDPOINT_MAX_CONCURRENCY', 20),
+    maxPerHost: parsePositiveIntEnv('CUSTOM_ENDPOINT_MAX_CONCURRENCY_PER_HOST', 4)
+});
+
 function isStorageUnavailableError(error) {
     return error instanceof StorageUnavailableError || error?.isStorageUnavailable;
 }
@@ -240,6 +278,25 @@ function respondStorageUnavailable(res, error, contextLabel = 'Storage', transla
     })();
     res.status(503).json({
         error: tFunc('server.errors.storageUnavailable', {}, 'Session storage temporarily unavailable, please retry.')
+    });
+    return true;
+}
+
+function respondSessionCapacity(res, error, translator) {
+    if (!(error instanceof SessionCapacityError) && !error?.isSessionCapacity) {
+        return false;
+    }
+    const tFunc = typeof translator === 'function'
+        ? translator
+        : (res?.locals?.t || getTranslator(DEFAULT_LANG));
+    log.error(() => `[Session API] Hard session ${error.reason || 'storage'} limit rejected a new write (${error.current ?? 'unknown'} / ${error.limit ?? 'unknown'})`);
+    res.status(507).json({
+        error: tFunc(
+            'server.errors.sessionCapacityReached',
+            {},
+            'Session storage capacity has been reached. No existing sessions were removed; please contact the server operator.'
+        ),
+        code: 'SESSION_CAPACITY_REACHED'
     });
     return true;
 }
@@ -1426,6 +1483,24 @@ function setNoStore(res) {
     res.setHeader('X-Cache-Buster', Date.now().toString());
 }
 
+// Configuration UI files contain application code only (never user/session data).
+// Their release-version query makes them safe to retain indefinitely while a new
+// release automatically selects a new URL.
+function setImmutableVersionedAssetCache(res) {
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    res.setHeader('CDN-Cache-Control', 'public, max-age=31536000, immutable');
+    res.setHeader('Cloudflare-CDN-Cache-Control', 'public, max-age=31536000, immutable');
+    res.removeHeader('Pragma');
+    res.removeHeader('Expires');
+    res.removeHeader('Surrogate-Control');
+    res.removeHeader('X-Cache-Buster');
+}
+
+function setPublicUiDataCache(res) {
+    res.setHeader('Cache-Control', 'public, max-age=300, stale-while-revalidate=86400');
+    res.setHeader('CDN-Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400');
+}
+
 // Helper: caching policy for subtitle payloads
 // - loading/partial/error responses stay no-store to avoid caching placeholders
 // - final subtitle payloads also stay no-store to avoid stale subtitle reuse on some clients
@@ -1815,7 +1890,8 @@ function logRequestTrace(messageFn) {
 function redactRequestUrlForLogs(value) {
     return String(value || '')
         .replace(/(\/addon\/)([a-f0-9]{8})[a-f0-9]{20}([a-f0-9]{4})(?=\/|$|\?)/gi, '$1$2...$3')
-        .replace(/([?&]config=)([a-f0-9]{8})[a-f0-9]{20}([a-f0-9]{4})(?=&|$)/gi, '$1$2...$3');
+        .replace(/([?&]config=)([a-f0-9]{8})[a-f0-9]{20}([a-f0-9]{4})(?=&|$)/gi, '$1$2...$3')
+        .replace(/([?&]logToken=)([a-f0-9]{4})[a-f0-9]{24,120}([a-f0-9]{4})(?=&|$)/gi, '$1$2...$3');
 }
 
 function formatRequestTraceUrl(req, limit = REQUEST_TRACE_URL_LIMIT) {
@@ -2010,6 +2086,20 @@ const embeddedTranslationLimiter = rateLimit({
     }
 });
 
+// Security: Rate limiting for embedded subtitle delivery preparation.
+// Keep this separate from embeddedTranslationLimiter so preparing extracted
+// tracks cannot consume the quota needed for subsequent translations.
+const embeddedDeliveryLimiter = rateLimit({
+    windowMs: 1 * 60 * 1000, // 1 minute
+    max: 12,
+    message: 'Too many embedded subtitle preparation requests, please try again later.',
+    standardHeaders: true,
+    legacyHeaders: false,
+    store: createRateLimitRedisStore('rl:embeddeddelivery:'),
+    passOnStoreError: true,
+    keyGenerator: getConfigScopedRateLimitKey
+});
+
 // Security: Rate limiting for automatic subtitles pipeline
 const autoSubLimiter = rateLimit({
     windowMs: 1 * 60 * 1000,
@@ -2030,6 +2120,20 @@ const autoSubLimiter = rateLimit({
         }
         return `ip:${ipKeyGenerator(req.ip)}`;
     }
+});
+
+// Security: the live-log endpoint is intentionally keyed only by IP. Its
+// cryptographic capability authorizes a job, while this limiter prevents cheap
+// polling/reconnect floods before any channel lookup occurs.
+const autoSubLogLimiter = rateLimit({
+    windowMs: 1 * 60 * 1000,
+    max: parsePositiveIntEnv('AUTOSUB_LOG_RATE_LIMIT_PER_MINUTE', 180),
+    message: 'Too many auto-subtitle log requests, please slow down.',
+    standardHeaders: true,
+    legacyHeaders: false,
+    store: createRateLimitRedisStore('rl:autosublogs:'),
+    passOnStoreError: true,
+    keyGenerator: (req) => `ip:${ipKeyGenerator(req.ip)}`
 });
 
 // Security: Rate limiting for user data writes (synced/embedded subtitle saves)
@@ -2133,12 +2237,11 @@ const validationLimiter = rateLimit({
     }
 });
 
-// Enable gzip compression for all responses
-// SRT files compress extremely well (typically 5-10x reduction)
-// Use maximum compression (level 9) for best bandwidth savings
+// Enable gzip compression for all responses. Level 6 keeps nearly all of level
+// 9's size reduction without making cold UI requests contend for the zlib pool.
 app.use(compression({
     threshold: 512, // Compress responses larger than 512 bytes (was 1KB)
-    level: 9, // Maximum compression for SRT files (10-15x reduction)
+    level: 6,
     filter: (req, res) => {
         const accept = req.headers?.accept || '';
         const contentTypeHeader = res.getHeader('content-type') || '';
@@ -2405,55 +2508,31 @@ app.use('/addon/:config', (req, res, next) => {
 
 // Custom caching middleware for different file types
 app.use((req, res, next) => {
-    // Config UI assets must always be fresh to avoid stale layouts across hosts
-    const configUiAssets = [
-        '/css/configure.css',
-        '/css/combobox.css',
-        '/css/quick-setup.css',
-        '/js/init.js',
-        '/js/combobox.js',
-        '/js/combobox-init.js',
-        '/js/config-page-state.js',
-        '/js/config-loader.js',
-        '/js/ui-widgets.js',
-        '/js/theme-toggle.js',
-        '/js/sw-register.js',
-        '/js/quick-setup.js',
-        '/js/subtitle-menu.js',
-        '/sw.js'
-    ];
-    const configUiPartials = [
-        '/partials/main.html',
-        '/partials/footer.html',
-        '/partials/overlays.html',
-        '/partials/quick-setup.html'
-    ];
-    const configUiFonts = [
-        '/fonts/Twemoji.ttf'
-    ];
-    const isConfigUiAsset =
-        configUiAssets.includes(req.path) ||
-        configUiPartials.includes(req.path) ||
-        configUiFonts.includes(req.path);
+    if (CONFIG_UI_VERSIONED_ASSET_PATHS.has(req.path)) {
+        const query = req.query || {};
+        const versionParam = Object.prototype.hasOwnProperty.call(query, '_cb')
+            ? '_cb'
+            : (Object.prototype.hasOwnProperty.call(query, 'v') ? 'v' : '_cb');
+        const requestedVersion = query[versionParam];
 
-    if (isConfigUiAsset) {
-        // Force a cache-busting query so stale CDN copies (e.g. elfhosted) are bypassed
-        if (!Object.prototype.hasOwnProperty.call(req.query || {}, '_cb')) {
+        // Unversioned and stale URLs redirect to the current release key. Do not
+        // cache the redirect itself or it could pin a browser to an older release.
+        if (String(requestedVersion || '') !== String(CACHE_BUSTER_VERSION)) {
             try {
                 const url = new URL(req.originalUrl, `http://${req.headers.host || 'localhost'}`);
-                url.searchParams.set('_cb', CACHE_BUSTER_VERSION);
+                url.searchParams.set(versionParam, CACHE_BUSTER_VERSION);
+                setNoStore(res);
                 return res.redirect(307, url.pathname + url.search);
             } catch (err) {
                 log.warn(() => ['[Cache] Failed to build cache-buster redirect:', err.message]);
             }
+        } else {
+            setImmutableVersionedAssetCache(res);
         }
-        // Even with a cache-busted URL, mark the response as no-store to prevent future staleness
-        setNoStore(res);
     }
 
-    // Never cache session/config endpoints or configure assets (prevents cross-user bleed)
+    // Never cache user/session-dependent endpoints or generated application pages.
     const noStorePaths = [
-        '/config.js',
         '/configure.html',
         '/configure',
         '/api/get-session',
@@ -2480,8 +2559,7 @@ app.use((req, res, next) => {
         '/embedded-subtitles',
         '/auto-subtitles',
         '/smdb',
-        '/api/smdb',
-        ...configUiAssets
+        '/api/smdb'
     ];
 
     if (noStorePaths.some(p => req.path === p || req.path.startsWith(`${p}/`))) {
@@ -2539,7 +2617,7 @@ app.use(express.static('public', {
             return;
         }
         if (res.getHeader('Cache-Control')) return; // Preserve explicit no-store
-        res.setHeader('Cache-Control', 'public, max-age=31536000000, immutable');
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
     }
 }));
 
@@ -2687,6 +2765,7 @@ app.get('/api/changelog', (req, res) => {
 app.get('/api/languages', (req, res) => {
     try {
         const languages = getAllLanguages();
+        setPublicUiDataCache(res);
         res.json(languages);
     } catch (error) {
         log.error(() => '[API] Error getting languages:', error);
@@ -2700,6 +2779,7 @@ app.get('/api/languages', (req, res) => {
 app.get('/api/languages/translation', (req, res) => {
     try {
         const languages = getAllTranslationLanguages();
+        setPublicUiDataCache(res);
         res.json(languages);
     } catch (error) {
         log.error(() => '[API] Error getting translation languages:', error);
@@ -2711,10 +2791,14 @@ app.get('/api/languages/translation', (req, res) => {
 // API endpoint to fetch UI locale messages
 app.get('/api/locale', async (req, res) => {
     try {
-        setNoStore(res);
         const requestedLang = (req.query.lang || '').toString().trim().toLowerCase();
         let lang = requestedLang || DEFAULT_LANG;
         const configStr = req.query.config;
+        if (configStr) {
+            setNoStore(res);
+        } else {
+            setPublicUiDataCache(res);
+        }
         let t = res.locals?.t || getTranslatorFromRequest(req, res);
 
         // If config token is provided, prefer explicit lang param; otherwise fall back to saved uiLanguage
@@ -2847,29 +2931,109 @@ app.get('/api/test-opensubtitles', async (req, res) => {
     }
 });
 
+function getGeminiPublicError(error, t) {
+    const info = GeminiService.getErrorInfo(error);
+    if (info.type === 'unsupported_location') {
+        return {
+            errorType: info.type,
+            error: t(
+                'server.errors.geminiUnsupportedLocation',
+                {},
+                'Gemini rejected this server network location. Your API key may still be valid; the host must use eligible Gemini egress and, where Google requires it, paid Gemini API access.'
+            )
+        };
+    }
+    if (info.type === 'authentication') {
+        return {
+            errorType: info.type,
+            error: t('server.errors.invalidApiKeyAuth', {}, 'Invalid API key - authentication failed')
+        };
+    }
+    return {
+        errorType: info.type,
+        error: t(
+            'server.errors.geminiRequestRejected',
+            { reason: info.message },
+            `Gemini rejected the request: ${info.message}`
+        )
+    };
+}
+
+function getGeminiPublicErrorStatus(errorType) {
+    if (errorType === 'authentication') return 401;
+    if (errorType === 'rate_limit') return 429;
+    if (errorType === 'invalid_request') return 400;
+
+    // A reverse proxy may replace an origin 502 response with its own HTML
+    // error page. 424 keeps the safe structured dependency error intact for
+    // unsupported locations and other Gemini upstream/discovery failures.
+    return 424;
+}
+
+async function resolveModelDiscoveryConfig(req, res, contextLabel) {
+    let t = res.locals?.t || getTranslatorFromRequest(req, res);
+    const configStr = typeof req.body?.configStr === 'string' ? req.body.configStr.trim() : '';
+
+    // Model discovery is a server-originated outbound-request capability. A
+    // format-valid token alone is insufficient: resolve it before inspecting
+    // raw credentials or performing provider DNS/network work.
+    if (!/^[a-f0-9]{32}$/.test(configStr)) {
+        res.status(401).json({
+            error: t('server.errors.invalidSessionToken', {}, 'Invalid or expired session token')
+        });
+        return null;
+    }
+
+    const resolvedConfig = await resolveConfigGuarded(configStr, req, res, contextLabel, t);
+    if (!resolvedConfig) return null;
+    if (isInvalidSessionConfig(resolvedConfig)) {
+        t = getTranslatorFromRequest(req, res, resolvedConfig);
+        res.status(401).json({
+            error: t('server.errors.invalidSessionToken', {}, 'Invalid or expired session token')
+        });
+        return null;
+    }
+
+    return {
+        configStr,
+        resolvedConfig,
+        t: getTranslatorFromRequest(req, res, resolvedConfig)
+    };
+}
+
+function respondCustomEndpointConcurrencyLimit(res, t, error) {
+    if (error?.code !== 'EOUTBOUND_CONCURRENCY') return false;
+    setNoStore(res);
+    res.setHeader('Retry-After', '2');
+    res.status(429).json({
+        valid: false,
+        error: t(
+            'server.errors.customProviderBusy',
+            {},
+            'Too many custom provider requests are already in progress. Please retry shortly.'
+        )
+    });
+    return true;
+}
+
 // API endpoint to fetch Gemini models
-app.post('/api/gemini-models', async (req, res) => {
+app.post('/api/gemini-models', validationLimiter, async (req, res) => {
     // CRITICAL: Prevent caching to avoid cross-user config contamination (user credentials in request body)
     setNoStore(res);
 
     try {
-        let t = res.locals?.t || getTranslatorFromRequest(req, res);
-        const { apiKey, configStr } = req.body || {};
-        let resolvedConfig = null;
-
-        let geminiApiKey = apiKey;
-
-        // Allow fetching models using the user's saved config (session token)
-        if (!geminiApiKey && configStr) {
-            resolvedConfig = await resolveConfigGuarded(configStr, req, res, '[API] gemini-models config', t);
-            if (!resolvedConfig) return;
-            if (isInvalidSessionConfig(resolvedConfig)) {
-                t = getTranslatorFromRequest(req, res, resolvedConfig);
-                return res.status(401).json({ error: t('server.errors.invalidSessionToken', {}, 'Invalid or expired session token') });
-            }
-            t = getTranslatorFromRequest(req, res, resolvedConfig);
-            geminiApiKey = await selectGeminiApiKey(resolvedConfig) || process.env.GEMINI_API_KEY;
+        const discoveryContext = await resolveModelDiscoveryConfig(req, res, '[API] gemini-models config');
+        if (!discoveryContext) return;
+        const { resolvedConfig } = discoveryContext;
+        const t = discoveryContext.t;
+        const rawApiKey = typeof req.body?.apiKey === 'string' ? req.body.apiKey.trim() : '';
+        if (rawApiKey.length > 8192) {
+            return res.status(400).json({ error: t('server.errors.invalidApiKey', {}, 'API key is too long') });
         }
+
+        // Raw keys remain supported for the configure page, but only after the
+        // caller proves possession of a live configuration token.
+        const geminiApiKey = rawApiKey || await selectGeminiApiKey(resolvedConfig) || process.env.GEMINI_API_KEY;
 
         if (!geminiApiKey) {
             return res.status(400).json({ error: t('server.errors.apiKeyRequired', {}, 'API key is required') });
@@ -2891,41 +3055,32 @@ app.post('/api/gemini-models', async (req, res) => {
 
         res.json(filteredModels);
     } catch (error) {
-        log.error(() => '[API] Error fetching Gemini models:', error);
-        const upstreamError = error?.response?.data?.error || error?.response?.data?.message;
-        const message = typeof upstreamError === 'string'
-            ? upstreamError
-            : (upstreamError?.message || error.message || 'Failed to fetch models');
-        const status = Number(error?.response?.status || error?.statusCode || 0);
         const t = res.locals?.t || getTranslatorFromRequest(req, res);
-        res.status(status === 401 || status === 403 ? 401 : (status === 408 || status === 429 || status >= 500 ? 503 : 500))
-            .json({
-                error: t('server.errors.modelsFailed', { reason: message }, message),
-                retryable: status === 408 || status === 429 || status >= 500
-            });
+        const publicError = getGeminiPublicError(error, t);
+        log.warn(() => `[API] Gemini model discovery failed (${publicError.errorType})`);
+        res.status(getGeminiPublicErrorStatus(publicError.errorType)).json(publicError);
     }
 });
 
 // Generic model discovery endpoint for alternative providers
-app.post('/api/models/:provider', async (req, res) => {
+app.post('/api/models/:provider', validationLimiter, async (req, res) => {
     // CRITICAL: Prevent caching to avoid cross-user config contamination (user-specific config in request body)
     setNoStore(res);
 
     try {
-        let t = res.locals?.t || getTranslatorFromRequest(req, res);
+        const discoveryContext = await resolveModelDiscoveryConfig(req, res, '[API] models config');
+        if (!discoveryContext) return;
+        let t = discoveryContext.t;
         const providerKey = String(req.params.provider || '').toLowerCase();
-        const { apiKey, configStr } = req.body || {};
+        const apiKey = typeof req.body?.apiKey === 'string' ? req.body.apiKey.trim() : '';
+        if (apiKey.length > 8192) {
+            return res.status(400).json({ error: t('server.errors.invalidApiKey', {}, 'API key is too long') });
+        }
         const providerDefaults = getDefaultProviderParameters();
-        let resolvedConfig = null;
+        const resolvedConfig = discoveryContext.resolvedConfig;
 
         // Allow using the user's saved config (session token) instead of passing API keys in the request body
         const getProviderConfigFromSession = async () => {
-            if (!configStr) return null;
-            resolvedConfig = resolvedConfig || await resolveConfigGuarded(configStr, req, res, '[API] models config', t);
-            if (!resolvedConfig) return null;
-            if (isInvalidSessionConfig(resolvedConfig)) {
-                return { __invalidSession: true };
-            }
             t = getTranslatorFromRequest(req, res, resolvedConfig);
 
             if (providerKey === 'gemini') {
@@ -2954,10 +3109,6 @@ app.post('/api/models/:provider', async (req, res) => {
 
         const sessionProvider = await getProviderConfigFromSession();
 
-        if (sessionProvider?.__invalidSession === true) {
-            return res.status(401).json({ error: t('server.errors.invalidSessionToken', {}, 'Invalid or expired session token') });
-        }
-
         let providerApiKey = apiKey || sessionProvider?.apiKey;
         let providerModel = sessionProvider?.model || '';
         let providerParams = sessionProvider?.params || {};
@@ -2973,41 +3124,57 @@ app.post('/api/models/:provider', async (req, res) => {
                 providerModel,
                 providerParams
             );
-            const models = await gemini.getAvailableModels({ silent: true });
+            const models = await gemini.getAvailableModels({ silent: true, throwOnError: true });
             return res.json(models);
         }
 
         // For custom provider, API key is optional (local LLMs don't require it)
         // but baseUrl is required and must be validated for SSRF
         if (providerKey === 'custom') {
-            const baseUrl = req.body.baseUrl || sessionProvider?.baseUrl || '';
+            const submittedBaseUrl = typeof req.body?.baseUrl === 'string' ? req.body.baseUrl.trim() : '';
+            const baseUrl = submittedBaseUrl || sessionProvider?.baseUrl || '';
             if (!baseUrl) {
                 return res.status(400).json({ error: t('server.errors.baseUrlRequired', {}, 'Base URL is required for custom provider') });
             }
-
-            // SSRF protection: validate baseUrl before making external requests
-            const { validateCustomBaseUrl } = require('./src/utils/ssrfProtection');
-            const validation = await validateCustomBaseUrl(baseUrl);
-            if (!validation.valid) {
-                return res.status(400).json({ error: validation.error });
+            if (baseUrl.length > 2048) {
+                return res.status(400).json({ error: t('server.errors.customProviderFieldsTooLong', {}, 'Custom provider configuration contains an overlong field') });
             }
 
-            const provider = await createProviderInstance(
-                providerKey,
-                {
-                    apiKey: providerApiKey || '',
-                    model: providerModel,
-                    baseUrl: validation.sanitized
-                },
-                providerParams
-            );
-
-            if (!provider || typeof provider.getAvailableModels !== 'function') {
-                return res.status(400).json({ error: t('server.errors.unsupportedProvider', {}, 'Unsupported provider') });
+            // Parse and apply the synchronous URL policy before reserving a
+            // concurrency slot. DNS validation and every subsequent outbound
+            // operation then run inside that slot as one bounded unit.
+            const { assertSafeCustomRequestUrl, validateCustomBaseUrl } = require('./src/utils/ssrfProtection');
+            let concurrencyUrl;
+            try {
+                concurrencyUrl = assertSafeCustomRequestUrl(baseUrl).toString();
+            } catch (error) {
+                const message = String(error?.message || '').replace(/^\[SSRF\]\s*/, '');
+                return res.status(400).json({ error: message || 'Invalid custom provider URL' });
             }
 
-            const models = await provider.getAvailableModels();
-            return res.json(models);
+            return await customEndpointConcurrencyLimiter.run(concurrencyUrl, async () => {
+                const validation = await validateCustomBaseUrl(baseUrl);
+                if (!validation.valid) {
+                    return res.status(400).json({ error: validation.error });
+                }
+
+                const provider = await createProviderInstance(
+                    providerKey,
+                    {
+                        apiKey: providerApiKey || '',
+                        model: providerModel,
+                        baseUrl: validation.sanitized
+                    },
+                    providerParams
+                );
+
+                if (!provider || typeof provider.getAvailableModels !== 'function') {
+                    return res.status(400).json({ error: t('server.errors.unsupportedProvider', {}, 'Unsupported provider') });
+                }
+
+                const models = await provider.getAvailableModels();
+                return res.json(models);
+            });
         }
 
         if (!providerApiKey) {
@@ -3046,9 +3213,15 @@ app.post('/api/models/:provider', async (req, res) => {
         const models = await provider.getAvailableModels();
         res.json(models);
     } catch (error) {
+        const t = res.locals?.t || getTranslatorFromRequest(req, res);
+        if (respondCustomEndpointConcurrencyLimit(res, t, error)) return;
+        if (String(req.params.provider || '').toLowerCase() === 'gemini') {
+            const publicError = getGeminiPublicError(error, t);
+            log.warn(() => `[API] Gemini provider model discovery failed (${publicError.errorType})`);
+            return res.status(getGeminiPublicErrorStatus(publicError.errorType)).json(publicError);
+        }
         log.error(() => ['[API] Error fetching provider models:', error]);
         const message = error?.response?.data?.error || error?.response?.data?.message || error.message || 'Failed to fetch models';
-        const t = res.locals?.t || getTranslatorFromRequest(req, res);
         res.status(500).json({ error: t('server.errors.modelsFailed', { reason: message }, message) });
     }
 });
@@ -3098,41 +3271,52 @@ app.post('/api/validate-custom-provider', validationLimiter, async (req, res) =>
     }
 
     try {
-        const { validateCustomBaseUrl } = require('./src/utils/ssrfProtection');
-        const baseUrlValidation = await validateCustomBaseUrl(rawBaseUrl);
-        if (!baseUrlValidation.valid) {
-            return res.status(400).json({ valid: false, error: baseUrlValidation.error });
+        const { assertSafeCustomRequestUrl, validateCustomBaseUrl } = require('./src/utils/ssrfProtection');
+        let concurrencyUrl;
+        try {
+            concurrencyUrl = assertSafeCustomRequestUrl(rawBaseUrl).toString();
+        } catch (error) {
+            const message = String(error?.message || '').replace(/^\[SSRF\]\s*/, '');
+            return res.status(400).json({ valid: false, error: message || 'Invalid custom provider URL' });
         }
 
-        const provider = await createProviderInstance(
-            'custom',
-            {
-                apiKey: sanitizedApiKey || '',
-                model: rawModel,
-                baseUrl: baseUrlValidation.sanitized
-            },
-            {
-                temperature: 0,
-                topP: 1,
-                maxOutputTokens: 16,
-                translationTimeout: 15,
-                maxRetries: 0
+        return await customEndpointConcurrencyLimiter.run(concurrencyUrl, async () => {
+            const baseUrlValidation = await validateCustomBaseUrl(rawBaseUrl);
+            if (!baseUrlValidation.valid) {
+                return res.status(400).json({ valid: false, error: baseUrlValidation.error });
             }
-        );
 
-        if (!provider || typeof provider.validateConfiguration !== 'function') {
-            return res.status(400).json({
-                valid: false,
-                error: t('server.errors.customProviderUnavailable', {}, 'Custom provider configuration could not be initialized')
+            const provider = await createProviderInstance(
+                'custom',
+                {
+                    apiKey: sanitizedApiKey || '',
+                    model: rawModel,
+                    baseUrl: baseUrlValidation.sanitized
+                },
+                {
+                    temperature: 0,
+                    topP: 1,
+                    maxOutputTokens: 16,
+                    translationTimeout: 15,
+                    maxRetries: 0
+                }
+            );
+
+            if (!provider || typeof provider.validateConfiguration !== 'function') {
+                return res.status(400).json({
+                    valid: false,
+                    error: t('server.errors.customProviderUnavailable', {}, 'Custom provider configuration could not be initialized')
+                });
+            }
+
+            await provider.validateConfiguration();
+            return res.json({
+                valid: true,
+                message: t('server.validation.customProviderValid', {}, 'Custom provider configuration is valid')
             });
-        }
-
-        await provider.validateConfiguration();
-        return res.json({
-            valid: true,
-            message: t('server.validation.customProviderValid', {}, 'Custom provider configuration is valid')
         });
     } catch (error) {
+        if (respondCustomEndpointConcurrencyLimit(res, t, error)) return;
         const upstream = error?.originalError || error;
         const status = Number(upstream?.response?.status || error?.statusCode || 0);
         const code = String(upstream?.code || error?.code || '').toUpperCase();
@@ -3436,14 +3620,22 @@ app.post('/api/validate-gemini', validationLimiter, async (req, res) => {
 
         const geminiAuthFailureCacheKey = getProviderAuthFailureCacheKey('gemini', geminiApiKey);
         try {
-            const gemini = new GeminiService(geminiApiKey, undefined, { translationTimeout: 10 });
+            // Validate through the same v1beta client and x-goog-api-key header used
+            // for model discovery and translation. This also supports Google's new
+            // authorization keys (AQ.) without assuming any key prefix or shape.
+            // An explicit user validation must always recheck upstream so a stale
+            // negative cache entry from an older release or key provisioning delay
+            // cannot keep a now-valid key marked invalid for the full cache TTL.
+            const gemini = new GeminiService(geminiApiKey);
             const models = await gemini.getAvailableModels({
                 silent: true,
                 throwOnError: true,
-                bypassAuthFailureCache: true
+                bypassAuthFailureCache: true,
+                cacheAuthFailures: false
             });
 
             await clearCachedProviderAuthFailure(geminiAuthFailureCacheKey);
+
             res.json({
                 valid: true,
                 modelCount: models.length,
@@ -3451,56 +3643,22 @@ app.post('/api/validate-gemini', validationLimiter, async (req, res) => {
                 message: t('server.validation.apiKeyValid', {}, 'API key is valid')
             });
         } catch (apiError) {
-            // Check for authentication errors
-            if (apiError.response?.status === 401 || apiError.response?.status === 403) {
-                await cacheProviderAuthFailure(geminiAuthFailureCacheKey);
-                res.json({
-                    valid: false,
-                    error: t('server.errors.invalidApiKeyAuth', {}, 'Invalid API key - authentication failed')
-                });
-            } else if (apiError.response?.status === 400) {
-                // Extract error message, handling both string and object responses
-                let errorMessage = 'Invalid API key';
-                const errorData = apiError.response?.data?.error || apiError.response?.data?.message;
-                if (typeof errorData === 'string') {
-                    errorMessage = errorData;
-                } else if (errorData && typeof errorData === 'object') {
-                    errorMessage = errorData.message || JSON.stringify(errorData);
-                }
-                if (String(errorMessage || '').toLowerCase().includes('api key')) {
-                    await cacheProviderAuthFailure(geminiAuthFailureCacheKey);
-                }
-                res.json({
-                    valid: false,
-                    error: t('server.errors.invalidApiKey', {}, errorMessage)
-                });
-            } else {
-                const status = Number(apiError?.response?.status || apiError?.statusCode || 0);
-                const upstream = apiError?.response?.data?.error || apiError?.response?.data?.message;
-                const reason = typeof upstream === 'string'
-                    ? upstream
-                    : (upstream?.message || apiError.message || 'Gemini API is temporarily unavailable');
-                return res.status(status === 408 || status === 429 || status >= 500 ? 503 : 500).json({
-                    valid: false,
-                    retryable: status === 408 || status === 429 || status >= 500,
-                    error: t('server.validation.apiError', { reason }, `API error: ${reason}`)
-                });
+            const info = GeminiService.getErrorInfo(apiError);
+            if (info.type !== 'authentication') {
+                // A location/precondition failure says nothing about whether the
+                // submitted key is valid, so never poison the auth-failure cache.
+                await clearCachedProviderAuthFailure(geminiAuthFailureCacheKey);
             }
+
+            const publicError = getGeminiPublicError(apiError, t);
+            res.json({ valid: false, ...publicError });
         }
     } catch (error) {
-        const isAuthError = error.response?.status === 401 ||
-            error.response?.status === 403 ||
-            error.message?.toLowerCase().includes('api key') ||
-            error.message?.toLowerCase().includes('invalid') ||
-            error.message?.toLowerCase().includes('permission');
-
-        const status = Number(error?.response?.status || error?.statusCode || 0);
-        res.status(isAuthError ? 200 : (status === 408 || status === 429 || status >= 500 ? 503 : 500)).json({
+        const t = res.locals?.t || getTranslatorFromRequest(req, res);
+        const publicError = getGeminiPublicError(error, t);
+        res.json({
             valid: false,
-            retryable: !isAuthError && (status === 408 || status === 429 || status >= 500),
-            error: isAuthError
-                ? (res.locals?.t || getTranslatorFromRequest(req, res))('server.errors.invalidApiKey', {}, 'Invalid API key')
-                : (res.locals?.t || getTranslatorFromRequest(req, res))('server.validation.apiError', { reason: error.message }, `API error: ${error.message}`)
+            ...publicError
         });
     }
 });
@@ -3619,7 +3777,10 @@ app.post('/api/validate-wyzie', validationLimiter, async (req, res) => {
 
         const WyzieSubsService = require('./src/services/wyzieSubs');
         const wyzie = new WyzieSubsService(apiKey);
-        const result = await wyzie.validateApiKey({ timeout: 10000 });
+        const result = await wyzie.validateApiKey({
+            timeout: 10000,
+            cacheAuthFailures: false
+        });
 
         if (result.valid) {
             const payload = {
@@ -3629,6 +3790,16 @@ app.post('/api/validate-wyzie', validationLimiter, async (req, res) => {
 
             if (Number.isFinite(result.resultsCount)) {
                 payload.resultsCount = result.resultsCount;
+            }
+
+            if (typeof result.keyType === 'string' && result.keyType) {
+                payload.keyType = result.keyType;
+            }
+            if (Array.isArray(result.availableSources)) {
+                payload.availableSources = result.availableSources;
+            }
+            if (Array.isArray(result.restrictedSources)) {
+                payload.restrictedSources = result.restrictedSources;
             }
 
             return res.json(payload);
@@ -3659,7 +3830,7 @@ app.post('/api/validate-wyzie', validationLimiter, async (req, res) => {
 });
 
 // API endpoint to validate AssemblyAI API key
-app.post('/api/validate-assemblyai', async (req, res) => {
+app.post('/api/validate-assemblyai', validationLimiter, async (req, res) => {
     setNoStore(res);
     try {
         const t = res.locals?.t || getTranslatorFromRequest(req, res);
@@ -3706,6 +3877,17 @@ app.post('/api/validate-assemblyai', async (req, res) => {
     }
 });
 
+function rejectEncryptedSessionCredentialInput(res, t, rejectedFieldCount) {
+    log.warn(() => `[Session API] Rejected ciphertext-shaped credential input in ${rejectedFieldCount} field(s)`);
+    return res.status(400).json({
+        error: t(
+            'server.errors.encryptedCredentialInput',
+            {},
+            'Encrypted credential values are not accepted. Please enter the credential normally.'
+        )
+    });
+}
+
 // API endpoint to create a session (production mode)
 // Apply rate limiting to prevent session flooding attacks
 app.post('/api/create-session', sessionCreationLimiter, enforceConfigPayloadSize, async (req, res) => {
@@ -3716,6 +3898,11 @@ app.post('/api/create-session', sessionCreationLimiter, enforceConfigPayloadSize
 
         if (!config) {
             return res.status(400).json({ error: t('server.session.configRequired', {}, 'Configuration is required') });
+        }
+
+        const encryptedSensitiveInputs = findEncryptedSensitiveInputPaths(config);
+        if (encryptedSensitiveInputs.length > 0) {
+            return rejectEncryptedSessionCredentialInput(res, t, encryptedSensitiveInputs.length);
         }
 
         const localhost = isLocalhost(req);
@@ -3755,17 +3942,21 @@ app.post('/api/create-session', sessionCreationLimiter, enforceConfigPayloadSize
         // Respond with 503 if storage is temporarily unavailable to signal retry-ability
         // instead of 500 which might cause clients to give up or discard the config
         const t = res.locals?.t || getTranslatorFromRequest(req, res);
+        if (respondSessionCapacity(res, error, t)) return;
         if (respondStorageUnavailable(res, error, '[Session API]', t)) {
             return;
+        }
+        if (error?.code === 'ENCRYPTED_SENSITIVE_INPUT') {
+            return rejectEncryptedSessionCredentialInput(res, t, error.rejectedFieldCount || 1);
         }
         log.error(() => '[Session API] Error creating session:', error);
         res.status(500).json({ error: t('server.errors.sessionCreateFailed', {}, 'Failed to create session') });
     }
 });
 
-// API endpoint to update an existing session
-// Uses sessionUpdateLimiter (60/hour) instead of sessionCreationLimiter (10/hour)
-// because updates are the normal save flow and should not exhaust the creation quota
+// API endpoint to update an existing session. This route never creates: a
+// missing token returns 404 and clients explicitly use the creation-limited
+// POST /api/create-session fallback.
 app.post('/api/update-session/:token', sessionUpdateLimiter, enforceConfigPayloadSize, async (req, res) => {
     try {
         setNoStore(res); // prevent any caching of session tokens
@@ -3779,6 +3970,11 @@ app.post('/api/update-session/:token', sessionUpdateLimiter, enforceConfigPayloa
 
         if (!token) {
             return res.status(400).json({ error: t('server.session.tokenRequired', {}, 'Session token is required') });
+        }
+
+        const encryptedSensitiveInputs = findEncryptedSensitiveInputPaths(config);
+        if (encryptedSensitiveInputs.length > 0) {
+            return rejectEncryptedSessionCredentialInput(res, t, encryptedSensitiveInputs.length);
         }
 
         const localhost = isLocalhost(req);
@@ -3813,19 +4009,11 @@ app.post('/api/update-session/:token', sessionUpdateLimiter, enforceConfigPayloa
         const updated = await sessionManager.updateSession(token, config);
 
         if (!updated) {
-            // Session doesn't exist - create new one instead
-            log.debug(() => `[Session API] Session not found, creating new one`);
-            const newToken = await sessionManager.createSession(config);
-            const sessionBrief = await sessionManager.getSessionBrief(newToken);
+            log.debug(() => `[Session API] Session not found during update; returning 404 for explicit limited creation`);
             invalidateRouterCache(token, 'session token expired');
-            return res.json({
-                token: newToken,
-                type: 'session',
-                updated: false,
-                created: true,
-                message: t('server.session.expiredCreated', {}, 'Session expired or not found, created new session'),
-                expiresIn: process.env.SESSION_MAX_AGE || 90 * 24 * 60 * 60 * 1000,
-                session: sessionBrief
+            return res.status(404).json({
+                error: t('server.errors.sessionNotFound', {}, 'Session not found'),
+                code: 'SESSION_NOT_FOUND'
             });
         }
 
@@ -3846,8 +4034,12 @@ app.post('/api/update-session/:token', sessionUpdateLimiter, enforceConfigPayloa
         // state) during transient Redis hiccups. The 503 signals to clients that they should
         // retry with the same token instead of discarding it.
         const t = res.locals?.t || getTranslatorFromRequest(req, res);
+        if (respondSessionCapacity(res, error, t)) return;
         if (respondStorageUnavailable(res, error, '[Session API]', t)) {
             return;
+        }
+        if (error?.code === 'ENCRYPTED_SENSITIVE_INPUT') {
+            return rejectEncryptedSessionCredentialInput(res, t, error.rejectedFieldCount || 1);
         }
         log.error(() => '[Session API] Error updating session:', error);
         res.status(500).json({ error: t('server.errors.sessionUpdateFailed', {}, 'Failed to update session') });
@@ -4017,13 +4209,13 @@ app.delete('/api/session/:token', async (req, res) => {
     }
 });
 
-// API endpoint to fetch a stored session configuration by token (for UI prefill)
-// Supports autoRegenerate=true query param to create a fresh default session if the stored one is missing/corrupted
+// Read-only endpoint to fetch a stored session configuration by token (for UI
+// prefill). Missing/corrupt sessions return 404; clients may explicitly POST to
+// the creation-limited endpoint after presenting a recovered draft.
 app.get('/api/get-session/:token', async (req, res) => {
     try {
-        let t = res.locals?.t || getTranslatorFromRequest(req, res);
+        const t = res.locals?.t || getTranslatorFromRequest(req, res);
         const { token } = req.params;
-        const autoRegenerate = req.query.autoRegenerate === 'true';
 
         if (!token || !/^[a-f0-9]{32}$/.test(token)) {
             return res.status(400).json({ error: t('server.errors.sessionTokenFormat', {}, 'Invalid session token format') });
@@ -4037,47 +4229,22 @@ app.get('/api/get-session/:token', async (req, res) => {
         const cfg = await sessionManager.getSession(token);
 
         if (!cfg) {
-            // Session not found - check if we should auto-regenerate
-            if (autoRegenerate) {
-                log.info(() => `[Session API] Session not found for ${redactToken(token)}, auto-regenerating fresh default config`);
-
-                const { config: freshConfig, token: freshToken } = await regenerateDefaultConfig();
-                t = getTranslatorFromRequest(req, res, freshConfig);
-
-                // Invalidate any cached routers for the old token
-                invalidateRouterCache(token, 'session not found, regenerated');
-
-                return res.json({
-                    config: freshConfig,
-                    token: freshToken,
-                    regenerated: true,
-                    reason: t('server.errors.sessionNotFoundReason', {}, 'Session not found or expired'),
-                    session: await sessionManager.getSessionBrief(freshToken)
-                });
-            }
-
-            return res.status(404).json({ error: t('server.errors.sessionNotFound', {}, 'Session not found') });
+            return res.status(404).json({
+                error: t('server.errors.sessionNotFound', {}, 'Session not found'),
+                code: 'SESSION_NOT_FOUND'
+            });
         }
 
         // Check if this config resolves to empty_config_00 (corrupted payload)
         const normalized = normalizeConfig(cfg);
         const configHash = ensureConfigHash(normalized, token);
 
-        if (configHash === 'empty_config_00' && autoRegenerate) {
-            log.warn(() => `[Session API] Session ${redactToken(token)} resolved to empty_config_00, auto-regenerating`);
-
-            const { config: freshConfig, token: freshToken } = await regenerateDefaultConfig();
-            t = getTranslatorFromRequest(req, res, freshConfig);
-
-            // Invalidate cached router for the old token
-            invalidateRouterCache(token, 'empty_config_00 detected, regenerated');
-
-            return res.json({
-                config: freshConfig,
-                token: freshToken,
-                regenerated: true,
-                reason: t('server.errors.sessionConfigCorrupted', {}, 'Config payload was empty or corrupted (empty_config_00)'),
-                session: await sessionManager.getSessionBrief(freshToken)
+        if (configHash === 'empty_config_00') {
+            log.warn(() => `[Session API] Session ${redactToken(token)} resolved to empty_config_00; returning read-only 404 recovery response`);
+            invalidateRouterCache(token, 'empty_config_00 detected');
+            return res.status(404).json({
+                error: t('server.errors.sessionConfigCorrupted', {}, 'Config payload was empty or corrupted (empty_config_00)'),
+                code: 'SESSION_CONFIG_CORRUPTED'
             });
         }
 
@@ -4197,6 +4364,13 @@ app.post('/api/translate-file', fileTranslationLimiter, validateRequest(fileTran
 
             const thinking = clampNumber(incoming.thinkingBudget, -1, 200000);
             if (thinking !== null) parsed.thinkingBudget = thinking;
+
+            const thinkingLevel = typeof incoming.thinkingLevel === 'string'
+                ? incoming.thinkingLevel.trim().toLowerCase()
+                : '';
+            if (['disabled', 'minimal', 'low', 'medium', 'high'].includes(thinkingLevel)) {
+                parsed.thinkingLevel = thinkingLevel;
+            }
 
             const temperature = clampNumber(incoming.temperature, 0, 2);
             if (temperature !== null) parsed.temperature = temperature;
@@ -4659,33 +4833,6 @@ function createAddonWithConfig(config, baseUrl = '') {
     return builder;
 }
 
-/**
- * Helper: Regenerate a fresh default config session
- * Used when a config is corrupted (empty_config_00) or session token is missing/expired
- * @returns {Object} { config: Object, token: string } - Fresh default config and new session token
- */
-async function regenerateDefaultConfig() {
-    const defaultConfig = getDefaultConfig();
-    // Tag with metadata so downstream handlers know this came from regeneration
-    // Note: These flags are stripped before session creation to avoid fingerprint pollution
-    defaultConfig.__regenerated = true;
-    defaultConfig.__regeneratedAt = new Date().toISOString();
-
-    // Strip internal flags before creating session to ensure clean fingerprint
-    const cleanConfig = { ...defaultConfig };
-    stripInternalFlags(cleanConfig);
-
-    // Create a fresh session for this default config
-    const newToken = await sessionManager.createSession(cleanConfig);
-
-    log.info(() => `[ConfigRegeneration] Created fresh default config session: ${redactToken(newToken)}`);
-
-    return {
-        config: defaultConfig,
-        token: newToken
-    };
-}
-
 function createMissingSessionConfig(configStr) {
     const defaultConfig = getDefaultConfig();
     defaultConfig.__sessionTokenError = true;
@@ -4823,8 +4970,7 @@ async function resolveConfigAsync(configStr, req) {
     }
 
     // Session token not found - return default config with error flag
-    // NOTE: We do NOT create a new session here - that should only happen via /api/get-session?autoRegenerate=true
-    // Creating tokens here would result in multiple tokens being generated during page load
+    // Session creation is only allowed via the rate-limited POST endpoint.
     log.warn(() => `[ConfigResolver] Session token not found: ${configStr.substring(0, 8)}..., returning default config with error flag`);
     missingSessionTokenCache.set(configStr, true);
 
@@ -4944,6 +5090,33 @@ const subtitleDownloadHandler = async (req, res) => {
             setSubtitleCacheHeaders(res, 'final');
             res.send(cachedContent);
             return;
+        }
+
+        // Authenticated OpenSubtitles `/download` calls consume the user's
+        // daily quota when the link is generated. Some players (including
+        // Nuvio builds) probe every returned subtitle URL before the user has
+        // selected one. Coordinate a short intent window through Redis so two
+        // SubMaker pods allow one initial request, defer the other distinct
+        // file IDs, and immediately allow the file the client requests again
+        // as its real selection. Cache hits above never enter this guard.
+        const providerPrefixes = ['subdl_', 'subsource_', 'v3_', 'scs_', 'wyzie_', 'subsro_'];
+        const isOpenSubtitlesAuthFile = !providerPrefixes.some(prefix => fileId.startsWith(prefix));
+        const openSubtitlesConfig = config.subtitleProviders?.opensubtitles || {};
+        const usesOpenSubtitlesAuth = openSubtitlesConfig.enabled === true
+            && String(openSubtitlesConfig.implementationType || 'v3').toLowerCase() === 'auth'
+            && !!openSubtitlesConfig.username
+            && !!openSubtitlesConfig.password;
+        if (isOpenSubtitlesAuthFile && usesOpenSubtitlesAuth) {
+            const intent = await checkOpenSubtitlesDownloadIntent(configKey, fileId);
+            if (!intent.allowed) {
+                log.debug(() => `[Download] Deferred OpenSubtitles prefetch for ${fileId}: ${intent.reason}`);
+                const { createInvalidSubtitleMessage } = require('./src/handlers/subtitles');
+                const prefetchMessage = createInvalidSubtitleMessage('Click again to load this subtitle.', config?.uiLanguage || 'en');
+                res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+                res.setHeader('Content-Disposition', `attachment; filename="${fileId}.srt"`);
+                setSubtitleCacheHeaders(res, 'loading');
+                return res.send(prefetchMessage);
+            }
         }
 
         // STEP 2: Cache miss - check for Stremio Community prefetch cooldown
@@ -5116,24 +5289,10 @@ app.get('/addon/:config/error-subtitle/:errorType.srt', async (req, res) => {
         // Build base URL for reinstall links
         const baseUrl = `${req.protocol}://${req.get('host')}`;
 
-        // For session token errors, optionally generate a fresh token for the reinstall link
-        // Only do this when explicitly allowed to avoid spawning new sessions during in-app playback.
-        const allowRegenerate = String(req.query.regenerate || req.query.regen || '').toLowerCase() === 'true';
-        let regeneratedToken = null;
-        if (config.__sessionTokenError === true && errorType === 'session-token-not-found') {
-            if (allowRegenerate) {
-                const { token } = await regenerateDefaultConfig();
-                regeneratedToken = token;
-                log.info(() => `[Error Subtitle] Generated fresh token for error subtitle reinstall link: ${redactToken(token)}`);
-            } else {
-                log.debug(() => `[Error Subtitle] Skipping token regeneration for reinstall link (no regenerate flag)`);
-            }
-        }
-
         let content;
         switch (errorType) {
             case 'session-token-not-found':
-                content = createSessionTokenErrorSubtitle(regeneratedToken, baseUrl, config?.uiLanguage || 'en');
+                content = createSessionTokenErrorSubtitle(null, baseUrl, config?.uiLanguage || 'en');
                 break;
             case 'opensubtitles-auth':
                 content = createOpenSubtitlesAuthErrorSubtitle(config?.uiLanguage || 'en');
@@ -5147,7 +5306,7 @@ app.get('/addon/:config/error-subtitle/:errorType.srt', async (req, res) => {
                 content = createCredentialDecryptionErrorSubtitle(failedFields, config?.uiLanguage || 'en');
                 break;
             default:
-                content = createSessionTokenErrorSubtitle(regeneratedToken, baseUrl, config?.uiLanguage || 'en'); // Default to session token error
+                content = createSessionTokenErrorSubtitle(null, baseUrl, config?.uiLanguage || 'en'); // Default to session token error
                 break;
         }
 
@@ -6496,114 +6655,146 @@ app.get('/auto-subtitles', async (req, res) => {
 });
 
 // Live auto-subtitles log streaming (SSE + polling-friendly JSON)
-const LIVE_AUTOSUB_LOG_TTL_MS = 10 * 60 * 1000;
-const liveAutoSubLogChannels = new Map();
-function getAutoSubLogChannel(jobId) {
-    const id = (jobId && String(jobId).trim()) ? String(jobId).trim().slice(0, 128) : null;
-    if (!id) return null;
-    let channel = liveAutoSubLogChannels.get(id);
-    if (!channel) {
-        channel = {
-            logs: [],
-            listeners: new Set(),
-            done: false,
-            createdAt: Date.now(),
-            expiresAt: Date.now() + LIVE_AUTOSUB_LOG_TTL_MS
-        };
-        liveAutoSubLogChannels.set(id, channel);
-    } else {
-        channel.expiresAt = Date.now() + LIVE_AUTOSUB_LOG_TTL_MS;
+const LIVE_AUTOSUB_LOG_TTL_MS = parsePositiveIntEnv('AUTOSUB_LOG_CHANNEL_TTL_MS', 10 * 60 * 1000);
+const LIVE_AUTOSUB_LOG_DONE_TTL_MS = parsePositiveIntEnv('AUTOSUB_LOG_DONE_TTL_MS', 2 * 60 * 1000);
+const LIVE_AUTOSUB_SSE_HEARTBEAT_MS = parsePositiveIntEnv('AUTOSUB_LOG_SSE_HEARTBEAT_MS', 15 * 1000);
+const LIVE_AUTOSUB_SSE_IDLE_TIMEOUT_MS = parsePositiveIntEnv('AUTOSUB_LOG_SSE_IDLE_TIMEOUT_MS', 2 * 60 * 1000);
+const LIVE_AUTOSUB_SSE_MAX_LIFETIME_MS = parsePositiveIntEnv('AUTOSUB_LOG_SSE_MAX_LIFETIME_MS', 5 * 60 * 1000);
+const liveAutoSubLogs = new AutoSubLogRegistry({
+    ttlMs: LIVE_AUTOSUB_LOG_TTL_MS,
+    doneTtlMs: LIVE_AUTOSUB_LOG_DONE_TTL_MS,
+    maxChannels: parsePositiveIntEnv('AUTOSUB_LOG_MAX_CHANNELS', 500),
+    maxChannelsPerOwner: parsePositiveIntEnv('AUTOSUB_LOG_MAX_CHANNELS_PER_IP', 12),
+    maxListeners: parsePositiveIntEnv('AUTOSUB_LOG_MAX_SSE_CONNECTIONS', 200),
+    maxListenersPerOwner: parsePositiveIntEnv('AUTOSUB_LOG_MAX_SSE_CONNECTIONS_PER_IP', 6),
+    maxListenersPerChannel: parsePositiveIntEnv('AUTOSUB_LOG_MAX_LISTENERS_PER_CHANNEL', 2),
+    maxEntries: 250
+});
+
+function getAutoSubLogClientKey(req) {
+    try {
+        return ipKeyGenerator(req.ip);
+    } catch (_) {
+        return String(req.ip || req.socket?.remoteAddress || 'unknown').slice(0, 128);
     }
-    return channel;
 }
+
 function broadcastAutoSubLog(jobId, entry) {
     if (!entry || !entry.message) return entry;
-    const channel = getAutoSubLogChannel(jobId);
-    if (channel) {
-        channel.logs.push(entry);
-        channel.expiresAt = Date.now() + LIVE_AUTOSUB_LOG_TTL_MS;
-        for (const res of Array.from(channel.listeners || [])) {
-            try {
-                res.write('data: ' + JSON.stringify(entry) + '\n\n');
-            } catch (_) {
-                try { res.end(); } catch (_) { /* ignore */ }
-                channel.listeners.delete(res);
-            }
-        }
-    }
+    liveAutoSubLogs.append(jobId, entry);
     return entry;
 }
 function finalizeAutoSubLog(jobId, logTrail = []) {
-    const channel = getAutoSubLogChannel(jobId);
-    if (!channel) return;
-    if (Array.isArray(logTrail) && logTrail.length) {
-        channel.logs = logTrail.slice(-250);
-    }
-    channel.done = true;
-    channel.expiresAt = Date.now() + 2 * 60 * 1000;
-    for (const res of Array.from(channel.listeners || [])) {
-        try {
-            res.write('event: done\ndata: {}\n\n');
-            res.end();
-        } catch (_) { /* ignore */ }
-        channel.listeners.delete(res);
-    }
+    liveAutoSubLogs.finalize(jobId, logTrail);
 }
 setInterval(() => {
-    const now = Date.now();
-    for (const [jobId, channel] of liveAutoSubLogChannels.entries()) {
-        if (!channel) {
-            liveAutoSubLogChannels.delete(jobId);
-            continue;
-        }
-        if (channel.expiresAt && channel.expiresAt < now) {
-            try {
-                for (const res of Array.from(channel.listeners || [])) {
-                    try { res.end(); } catch (_) { /* ignore */ }
-                }
-            } catch (_) { /* ignore */ }
-            liveAutoSubLogChannels.delete(jobId);
-        }
-    }
-}, LIVE_AUTOSUB_LOG_TTL_MS).unref?.();
+    liveAutoSubLogs.sweep();
+}, Math.min(LIVE_AUTOSUB_LOG_TTL_MS, 60 * 1000)).unref?.();
 
-app.get('/api/auto-subtitles/logs', (req, res) => {
+app.get('/api/auto-subtitles/logs', autoSubLogLimiter, (req, res) => {
     try {
-        const { jobId, since, format, replay = '1' } = req.query;
-        const channel = getAutoSubLogChannel(jobId);
-        if (!jobId || !channel) {
-            return res.status(400).json({ error: 'jobId is required' });
+        setNoStore(res);
+        const { jobId, logToken, since, format, replay = '1' } = req.query;
+        if (!jobId || !logToken) {
+            return res.status(400).json({ error: 'jobId and logToken are required' });
         }
-        const sinceTs = Number(since);
-        const entries = Array.isArray(channel.logs)
-            ? channel.logs.filter((entry) => {
-                const ts = Number(entry?.ts);
-                if (!Number.isFinite(sinceTs)) return true;
-                if (!Number.isFinite(ts)) return false;
-                return ts > sinceTs;
-            }).slice(-250)
-            : [];
+        // Lookup only: unknown jobs and incorrect capabilities are deliberately
+        // indistinguishable and never allocate server-side state.
+        const channel = liveAutoSubLogs.lookup(String(jobId), String(logToken));
+        if (!channel) {
+            return res.status(404).json({ error: 'Auto-subtitle log job not found' });
+        }
+
+        const entries = liveAutoSubLogs.entriesSince(channel, since);
         const wantsSse = (req.headers.accept || '').includes('text/event-stream') && format !== 'json';
         if (wantsSse) {
+            if (channel.done) {
+                res.setHeader('Content-Type', 'text/event-stream');
+                res.setHeader('Cache-Control', 'no-cache, no-transform');
+                res.setHeader('X-Accel-Buffering', 'no');
+                res.setHeader('Content-Encoding', 'identity');
+                res.flushHeaders?.();
+                if (replay !== '0') {
+                    for (const entry of entries) {
+                        if (!res.write('data: ' + JSON.stringify(entry) + '\n\n')) break;
+                    }
+                }
+                res.write('event: done\ndata: {}\n\n');
+                return res.end();
+            }
+
+            let closed = false;
+            let heartbeatTimer = null;
+            let idleTimer = null;
+            let lifetimeTimer = null;
+            const writeSse = (payload) => {
+                if (closed || res.writableEnded || res.destroyed) return false;
+                return res.write(payload);
+            };
+            const closeConnection = (endResponse = true) => {
+                if (closed) return;
+                closed = true;
+                if (heartbeatTimer) clearInterval(heartbeatTimer);
+                if (idleTimer) clearTimeout(idleTimer);
+                if (lifetimeTimer) clearTimeout(lifetimeTimer);
+                liveAutoSubLogs.detach(channel, listener);
+                if (endResponse && !res.writableEnded && !res.destroyed) {
+                    try { res.end(); } catch (_) { /* ignore */ }
+                }
+            };
+            const armIdleTimeout = () => {
+                if (idleTimer) clearTimeout(idleTimer);
+                idleTimer = setTimeout(() => closeConnection(true), LIVE_AUTOSUB_SSE_IDLE_TIMEOUT_MS);
+                idleTimer.unref?.();
+            };
+            const listener = {
+                sendEntry(entry) {
+                    armIdleTimeout();
+                    return writeSse('data: ' + JSON.stringify(entry) + '\n\n');
+                },
+                sendDone() {
+                    return writeSse('event: done\ndata: {}\n\n');
+                },
+                close() {
+                    closeConnection(true);
+                }
+            };
+            const attachment = liveAutoSubLogs.attach(channel, getAutoSubLogClientKey(req), listener);
+            if (!attachment.ok) {
+                const globalCapacity = attachment.reason === 'global-capacity';
+                res.setHeader('Retry-After', '10');
+                return res.status(globalCapacity ? 503 : 429).json({
+                    error: globalCapacity
+                        ? 'Auto-subtitle log stream capacity reached'
+                        : 'Too many auto-subtitle log streams'
+                });
+            }
+
             res.setHeader('Content-Type', 'text/event-stream');
-            res.setHeader('Cache-Control', 'no-cache');
+            res.setHeader('Cache-Control', 'no-cache, no-transform');
             res.setHeader('Connection', 'keep-alive');
             res.setHeader('X-Accel-Buffering', 'no');
             res.setHeader('Content-Encoding', 'identity');
             res.flushHeaders?.();
+            writeSse('retry: 5000\n\n');
             if (replay !== '0' && entries.length) {
-                entries.forEach((entry) => {
-                    res.write('data: ' + JSON.stringify(entry) + '\n\n');
-                });
+                for (const entry of entries) {
+                    if (!listener.sendEntry(entry)) {
+                        closeConnection(true);
+                        return;
+                    }
+                }
             }
-            if (channel.done) {
-                res.write('event: done\ndata: {}\n\n');
-                return res.end();
-            }
-            channel.listeners.add(res);
-            req.on('close', () => {
-                channel.listeners.delete(res);
-            });
+
+            armIdleTimeout();
+            heartbeatTimer = setInterval(() => {
+                if (!writeSse(': heartbeat\n\n')) closeConnection(true);
+            }, LIVE_AUTOSUB_SSE_HEARTBEAT_MS);
+            heartbeatTimer.unref?.();
+            lifetimeTimer = setTimeout(() => closeConnection(true), LIVE_AUTOSUB_SSE_MAX_LIFETIME_MS);
+            lifetimeTimer.unref?.();
+            req.once('close', () => closeConnection(false));
+            res.once('close', () => closeConnection(false));
             return;
         }
         return res.json({
@@ -6621,16 +6812,18 @@ app.get('/api/auto-subtitles/logs', (req, res) => {
 app.post('/api/auto-subtitles/run', autoSubLimiter, async (req, res) => {
     let logTrail = [];
     const jobId = (req.body?.jobId || '').toString().trim();
+    const logToken = (req.body?.logToken || '').toString().trim();
+    let liveLogJobId = null;
     let logFinalized = false;
     const finalizeLogs = (trail = logTrail) => {
         if (logFinalized) return;
-        finalizeAutoSubLog(jobId, trail);
+        finalizeAutoSubLog(liveLogJobId, trail);
         logFinalized = true;
     };
     const logStep = (message, level = 'info') => {
         const entry = { ts: Date.now(), level, message: String(message || '') };
         logTrail.push(entry);
-        return broadcastAutoSubLog(jobId, entry);
+        return broadcastAutoSubLog(liveLogJobId, entry);
     };
     const respond = (statusCode, payload) => {
         finalizeLogs(payload?.logTrail || logTrail);
@@ -6676,7 +6869,7 @@ app.post('/api/auto-subtitles/run', autoSubLimiter, async (req, res) => {
         const config = await resolveConfigGuarded(configStr, req, res, '[Auto Subs API] config', t);
         // If storage is unavailable, respondStorageUnavailable already replied
         if (!config) {
-            finalizeAutoSubLog(jobId, logTrail);
+            finalizeAutoSubLog(liveLogJobId, logTrail);
             return;
         }
         if (!config || config.__sessionTokenError === true) {
@@ -6688,6 +6881,22 @@ app.post('/api/auto-subtitles/run', autoSubLimiter, async (req, res) => {
             });
         }
         t = getTranslatorFromRequest(req, res, config);
+
+        // Only an authenticated /run request may reserve a channel. A missing
+        // or invalid optional live-log capability never prevents the subtitle
+        // job itself from running, preserving compatibility with older clients.
+        if (jobId || logToken) {
+            const reservation = liveAutoSubLogs.reserve(
+                jobId,
+                logToken,
+                getAutoSubLogClientKey(req)
+            );
+            if (reservation.ok) {
+                liveLogJobId = reservation.channel.id;
+            } else {
+                log.warn(() => `[Auto Subs Logs] Live logging unavailable (${reservation.reason})`);
+            }
+        }
 
         const validWorkflows = ['xml', 'json', 'original', 'ai'];
         const requestedWorkflow = (typeof options.translationWorkflow === 'string')
@@ -7131,7 +7340,7 @@ app.get('/addon/:config/xsync/:videoHash/:lang/:sourceSubId', async (req, res) =
 });
 
 // Async subtitle list for /subtitle-sync page to avoid blocking first paint
-app.get('/api/subtitle-sync/subtitles', async (req, res) => {
+app.get('/api/subtitle-sync/subtitles', searchLimiter, async (req, res) => {
     setNoStore(res);
     try {
         let t = res.locals?.t || getTranslatorFromRequest(req, res);
@@ -7465,7 +7674,7 @@ app.get('/addon/:config/xembedded/:videoHash/:lang/:trackId/original', async (re
     }
 });
 
-app.post('/api/prepare-embedded-track-delivery', async (req, res) => {
+app.post('/api/prepare-embedded-track-delivery', embeddedDeliveryLimiter, async (req, res) => {
     try {
         setNoStore(res);
         let t = res.locals?.t || getTranslatorFromRequest(req, res, req.body);
@@ -7720,6 +7929,13 @@ app.post('/api/translate-embedded', embeddedTranslationLimiter, async (req, res)
 
             const thinking = clampNumber(incoming.thinkingBudget, -1, 200000);
             if (thinking !== null) parsed.thinkingBudget = thinking;
+
+            const thinkingLevel = typeof incoming.thinkingLevel === 'string'
+                ? incoming.thinkingLevel.trim().toLowerCase()
+                : '';
+            if (['disabled', 'minimal', 'low', 'medium', 'high'].includes(thinkingLevel)) {
+                parsed.thinkingLevel = thinkingLevel;
+            }
 
             const temperature = clampNumber(incoming.temperature, 0, 2);
             if (temperature !== null) parsed.temperature = temperature;

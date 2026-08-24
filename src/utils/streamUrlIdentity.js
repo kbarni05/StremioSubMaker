@@ -1,11 +1,15 @@
 const { deriveVideoHash } = require('./videoHash');
 
 /**
- * Select the strongest filename evidence exposed by a stream URL.
+ * Select the best filename evidence exposed by a stream URL.
  *
  * Stremio's local streaming server uses opaque torrent routes such as
  * /<info-hash>/<file-index>. A trailing index like "0" is not a filename and
- * must not replace the filename already linked from Stremio.
+ * must not replace the filename already linked from Stremio, otherwise every
+ * toolbox hash check reports a false mismatch.
+ *
+ * This function is deliberately self-contained because its source is also
+ * embedded in the browser runtimes generated for the toolbox pages.
  */
 function selectStreamFilename(streamUrl, fallbackFilename = '') {
   const fallback = (fallbackFilename && String(fallbackFilename).trim()) || '';
@@ -36,6 +40,8 @@ function selectStreamFilename(streamUrl, fallbackFilename = '') {
   try {
     const url = new URL(streamUrl);
 
+    // Explicit filename parameters are strongest, but ignore values that are
+    // plainly IDs, booleans, or file indexes (for example ?file=0).
     for (const key of ['filename', 'file', 'download', 'dn']) {
       const candidate = tailPart(url.searchParams.get(key));
       if (candidate && !isOpaqueLocator(candidate)) return candidate;
@@ -45,12 +51,16 @@ function selectStreamFilename(streamUrl, fallbackFilename = '') {
     const pathnameTail = parts.length ? tailPart(parts[parts.length - 1]) : '';
     if (/\.[a-z0-9]{2,8}$/i.test(pathnameTail)) return pathnameTail;
 
+    // `name` and extensionless path segments are only hints. Prefer the linked
+    // filename when available because resolver URLs commonly use a short title
+    // in `name`, and Stremio torrent URLs end in a numeric file index.
     const nameHint = tailPart(url.searchParams.get('name'));
     if (fallback) return fallback;
     if (nameHint && !isOpaqueLocator(nameHint)) return nameHint;
     if (pathnameTail && !isOpaqueLocator(pathnameTail)) return pathnameTail;
   } catch (_) {
-    // The caller handles invalid URLs; retaining the linked filename is safest.
+    // Invalid URLs are handled by the caller's normal URL validation. Keeping
+    // the linked filename here avoids manufacturing a second, misleading hash.
   }
 
   return fallback;
@@ -75,7 +85,7 @@ function extractStreamVideoId(streamUrl, fallbackVideoId = '') {
     }
     if (!streamVideoId) {
       const parts = (url.pathname || '').split('/').filter(Boolean);
-      const directId = parts.find(part => /^tt\d+/i.test(part) || part.includes(':'));
+      const directId = parts.find((part) => /^tt\d+/i.test(part) || part.includes(':'));
       if (directId) streamVideoId = directId.trim();
     }
   } catch (_) {

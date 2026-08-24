@@ -46,6 +46,34 @@ function buildRateLimitUserMessage(serviceLabel, translate) {
   );
 }
 
+function getApiErrorMessage(error) {
+  const candidates = [
+    error?.response?.data?.message,
+    error?.providerMessage,
+    error?.originalError?.response?.data?.message,
+    error?.originalError?.providerMessage,
+    error?.message,
+    error?.originalError?.message
+  ];
+  const message = candidates.find(value => typeof value === 'string' && value.trim());
+  return String(message || '');
+}
+
+function isOpenSubtitlesQuotaError(error) {
+  if (!error) return false;
+  if (error.type === 'quota_exceeded') return true;
+
+  const statusCode = error.response?.status
+    || error.statusCode
+    || error.originalError?.response?.status
+    || error.originalError?.statusCode;
+  if (Number(statusCode) !== 406) return false;
+
+  const message = getApiErrorMessage(error).toLowerCase();
+  return (message.includes('allowed') && message.includes('subtitles'))
+    || (message.includes('quota') && message.includes('renew'));
+}
+
 function getResponseTextPreview(error, maxChars = 2048) {
   const data = error?.response?.data;
   if (data == null) return '';
@@ -93,6 +121,12 @@ function looksLikeCloudflareChallenge(error) {
   );
 }
 
+function isResponseTooLargeError(error) {
+  const message = [error?.message, error?.originalError?.message].filter(Boolean).join(' ');
+  const code = error?.code || error?.originalError?.code;
+  return code === 'ERR_BAD_RESPONSE' && /maxContentLength size of \d+ exceeded/i.test(message);
+}
+
 /**
  * Parse and classify an API error
  * @param {Error} error - The error object from axios or other API call
@@ -131,6 +165,25 @@ function parseApiError(error, serviceName = 'API', options = {}) {
   }
   if (parsed.type === 'service_unavailable') {
     parsed.userMessage = translate('apiErrors.serviceUnavailable', { service: serviceLabel }, 'Service temporarily unavailable. Please try again in a few minutes.');
+    return parsed;
+  }
+  if (parsed.type === 'unsupported_location') {
+    parsed.userMessage = translate(
+      'apiErrors.geminiUnsupportedLocation',
+      {},
+      'Gemini rejected this server network location. Your API key may still be valid; ask the host to use eligible Gemini egress and paid access where required.'
+    );
+    return parsed;
+  }
+
+  if (isResponseTooLargeError(error)) {
+    parsed.type = 'response_too_large';
+    parsed.isRetryable = false;
+    parsed.userMessage = translate(
+      'apiErrors.responseTooLarge',
+      { service: serviceLabel },
+      `${serviceLabel} returned more data than SubMaker can process safely. Try a different subtitle, model, or provider.`
+    );
     return parsed;
   }
 
@@ -200,9 +253,7 @@ function parseApiError(error, serviceName = 'API', options = {}) {
     // OpenSubtitles daily quota exceeded (406 Not Acceptable used for download quota)
     // Matches any plan: free (20), Gold (200), VIP (1000), etc.
     else if (parsed.statusCode === 406 && serviceName === 'OpenSubtitles') {
-      const msg = String(error.response?.data?.message || error.message || '').toLowerCase();
-      const looksLikeQuota = (msg.includes('allowed') && msg.includes('subtitles')) || (msg.includes('quota') && msg.includes('renew'));
-      if (looksLikeQuota) {
+      if (isOpenSubtitlesQuotaError(error)) {
         parsed.type = 'quota_exceeded';
         parsed.isRetryable = false;
         parsed.userMessage = translate('apiErrors.opensubsQuota', {}, 'OpenSubtitles daily download limit reached. Try again after the next UTC midnight.');
@@ -348,6 +399,7 @@ function handleDownloadError(error, serviceName, options = {}) {
   customError.statusCode = parsed.statusCode;
   customError.type = parsed.type;
   customError.isRetryable = parsed.isRetryable;
+  customError.providerMessage = getApiErrorMessage(error);
   // Mark as already logged to avoid duplicate logs in higher layers
   customError._alreadyLogged = true;
 
@@ -406,6 +458,8 @@ function handleTranslationError(error, serviceName, options = {}) {
     customError.translationErrorType = '503';
   } else if (!customError.translationErrorType && String(serviceName || '').toLowerCase() === 'deepl' && (parsed.statusCode === 456 || parsed.statusCode === 459)) {
     customError.translationErrorType = '429';
+  } else if (!customError.translationErrorType && parsed.type === 'response_too_large') {
+    customError.translationErrorType = 'RESPONSE_TOO_LARGE';
   } else if (!customError.translationErrorType && error.message && (error.message.includes('MAX_TOKENS') || error.message.includes('exceeded maximum token limit'))) {
     customError.translationErrorType = 'MAX_TOKENS';
   } else if (!customError.translationErrorType && error.message && (error.message.includes('PROHIBITED_CONTENT') || error.message.includes('RECITATION'))) {
@@ -442,6 +496,9 @@ function isRetryableError(error) {
 }
 
 module.exports = {
+  getApiErrorMessage,
+  isResponseTooLargeError,
+  isOpenSubtitlesQuotaError,
   parseApiError,
   logApiError,
   handleSearchError,

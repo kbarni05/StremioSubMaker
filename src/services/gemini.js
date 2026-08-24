@@ -1,7 +1,9 @@
 const axios = require('axios');
+const { version: PACKAGE_VERSION } = require('../../package.json');
 const { sanitizeApiKeyForHeader } = require('../utils/security');
-const { handleTranslationError, logApiError } = require('../utils/apiErrorHandler');
+const { handleTranslationError } = require('../utils/apiErrorHandler');
 const { httpAgent, httpsAgent } = require('../utils/httpAgents');
+const { MAX_AI_RESPONSE_BYTES } = require('../utils/resourceLimits');
 const log = require('../utils/logger');
 const { resolveLanguageDisplayName } = require('../utils/languageResolver');
 const { normalizeTargetLanguageForPrompt } = require('./utils/normalizeTargetLanguageForPrompt');
@@ -23,8 +25,11 @@ const {
   clearCachedProviderAuthFailure
 } = require('../utils/providerAuthFailureCache');
 
-// Use v1beta endpoint - v1 endpoint doesn't support /models/{model} operations
-const GEMINI_API_URL = process.env.GEMINI_API_BASE || 'https://generativelanguage.googleapis.com/v1beta';
+// Keep discovery, metadata, token counting, and generation on Google's current
+// documented Gemini REST surface.
+const DEFAULT_GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta';
+const GEMINI_CLIENT_HEADER = `stremio-submaker/${PACKAGE_VERSION}`;
+const MAX_GEMINI_ERROR_MESSAGE_CHARS = 500;
 const DEFAULT_GEMINI_MODEL = 'gemini-3.1-flash-lite';
 const MODEL_LIMITS_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 const MODEL_LIMITS_CACHE_MAX = normalizePositiveInteger(process.env.GEMINI_MODEL_LIMITS_CACHE_MAX, 100);
@@ -58,6 +63,49 @@ function clampInteger(value, fallback, min, max) {
   return Math.trunc(clampNumber(value, fallback, min, max));
 }
 
+function normalizeGeminiApiBase(value, options = {}) {
+  const raw = String(value || '').trim().replace(/\/+$/, '');
+  if (!raw) return options.fallback || null;
+
+  try {
+    const parsed = new URL(raw);
+    if (parsed.username || parsed.password || parsed.search || parsed.hash) {
+      return options.fallback || null;
+    }
+    if (options.httpsOnly && parsed.protocol !== 'https:') {
+      return options.fallback || null;
+    }
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+      return options.fallback || null;
+    }
+    return parsed.toString().replace(/\/+$/, '');
+  } catch (_) {
+    return options.fallback || null;
+  }
+}
+
+function redactGeminiSecrets(value) {
+  return String(value || '')
+    .replace(/\bAIza[A-Za-z0-9_-]{16,}\b/g, '[REDACTED_API_KEY]')
+    .replace(/\bAQ\.[A-Za-z0-9._-]{16,}\b/g, '[REDACTED_AUTH_KEY]');
+}
+
+function isGemini3Model(model) {
+  const modelId = normalizeGeminiModelId(model);
+  return /^gemini-3(?:[.-]|$)/i.test(modelId) || /^gemini-(?:flash|flash-lite|pro)-latest$/i.test(modelId);
+}
+
+function getFallbackOutputTokenLimit(model) {
+  const modelName = normalizeGeminiModelId(model).toLowerCase();
+  if (modelName.includes('2.0') || modelName.includes('-flash-001') || modelName.includes('-flash-lite-001')) {
+    return 8192;
+  }
+  if (modelName.includes('2.5') || isGemini3Model(modelName)) {
+    return 65536;
+  }
+  return 8192;
+}
+
 // Normalize human-readable target language names for Gemini prompts
 function normalizeTargetName(name) {
   const raw = String(name || '').trim();
@@ -70,15 +118,30 @@ function normalizeTargetName(name) {
 function getGeminiErrorMessage(error) {
   const dataError = error?.response?.data?.error;
   if (typeof dataError === 'string') {
-    return dataError;
+    return redactGeminiSecrets(dataError).replace(/\s+/g, ' ').trim().slice(0, MAX_GEMINI_ERROR_MESSAGE_CHARS);
   }
   if (dataError && typeof dataError === 'object') {
-    return dataError.message || JSON.stringify(dataError);
+    return redactGeminiSecrets(dataError.message || '').replace(/\s+/g, ' ').trim().slice(0, MAX_GEMINI_ERROR_MESSAGE_CHARS);
   }
-  return String(error?.response?.data?.message || error?.message || '');
+  return redactGeminiSecrets(error?.response?.data?.message || error?.message || '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, MAX_GEMINI_ERROR_MESSAGE_CHARS);
+}
+
+function isGeminiUnsupportedLocation(error) {
+  const message = getGeminiErrorMessage(error).toLowerCase();
+  return (
+    (message.includes('location') || message.includes('region') || message.includes('country') || message.includes('territor')) &&
+    (message.includes('not supported') || message.includes('unsupported') || message.includes('not available'))
+  );
 }
 
 function isGeminiAuthFailure(error) {
+  if (isGeminiUnsupportedLocation(error)) {
+    return false;
+  }
+
   const status = error?.response?.status || error?.statusCode;
   if (status === 401 || status === 403) {
     return true;
@@ -94,6 +157,71 @@ function isGeminiAuthFailure(error) {
     message.includes('permission') ||
     message.includes('authentication')
   );
+}
+
+function getGeminiErrorInfo(error) {
+  const statusCode = Number(error?.response?.status || error?.statusCode) || null;
+  const googleError = error?.response?.data?.error;
+  const googleStatus = typeof googleError === 'object' && googleError
+    ? String(googleError.status || '').trim().slice(0, 80)
+    : '';
+  const detailReason = Array.isArray(googleError?.details)
+    ? googleError.details
+      .map(detail => String(detail?.reason || '').trim())
+      .find(Boolean) || ''
+    : '';
+  const message = getGeminiErrorMessage(error) || 'Gemini request failed';
+
+  let type = 'upstream_error';
+  if (isGeminiUnsupportedLocation(error)) {
+    type = 'unsupported_location';
+  } else if (isGeminiAuthFailure(error)) {
+    type = 'authentication';
+  } else if (statusCode === 429) {
+    type = 'rate_limit';
+  } else if (statusCode === 400 || googleStatus === 'INVALID_ARGUMENT') {
+    type = 'invalid_request';
+  } else if (googleStatus === 'FAILED_PRECONDITION') {
+    type = 'failed_precondition';
+  } else if (statusCode && statusCode >= 500) {
+    type = 'server_error';
+  } else if (!statusCode) {
+    type = 'network_error';
+  }
+
+  return {
+    type,
+    statusCode,
+    googleStatus,
+    detailReason: redactGeminiSecrets(detailReason).slice(0, 120),
+    message
+  };
+}
+
+function decorateGeminiError(error) {
+  const info = getGeminiErrorInfo(error);
+  if (info.message) {
+    error.providerMessage = info.message;
+    error.message = info.message;
+  }
+  if (info.type === 'unsupported_location') {
+    error.type = 'unsupported_location';
+    error.isRetryable = false;
+    error.translationErrorType = 'GEMINI_UNSUPPORTED_LOCATION';
+  }
+  return info;
+}
+
+function logGeminiFailure(error, operation) {
+  const info = decorateGeminiError(error);
+  const metadata = [
+    `type=${info.type}`,
+    info.statusCode ? `http=${info.statusCode}` : '',
+    info.googleStatus ? `google=${info.googleStatus}` : '',
+    info.detailReason ? `reason=${info.detailReason}` : ''
+  ].filter(Boolean).join(', ');
+  log.warn(() => `[Gemini] ${operation} failed (${metadata || 'no status'}): ${info.message}`);
+  return info;
 }
 
 // Default translation prompt (base - thinking rules added conditionally)
@@ -119,7 +247,17 @@ class GeminiService {
     this.model = normalizeGeminiModelId(model || DEFAULT_GEMINI_MODEL, DEFAULT_GEMINI_MODEL);
     this.isGemmaModel = String(this.model).toLowerCase().includes('gemma');
     this.modelProfile = getGeminiModelProfile(this.model);
-    this.baseUrl = GEMINI_API_URL;
+    this.isGemini3Model = this.modelProfile.isGemini3 || isGemini3Model(this.model);
+    this.primaryBaseUrl = normalizeGeminiApiBase(process.env.GEMINI_API_BASE, {
+      fallback: DEFAULT_GEMINI_API_URL
+    });
+    this.fallbackBaseUrl = normalizeGeminiApiBase(process.env.GEMINI_API_FALLBACK_BASE, {
+      httpsOnly: true
+    });
+    if (this.fallbackBaseUrl === this.primaryBaseUrl) {
+      this.fallbackBaseUrl = null;
+    }
+    this.baseUrl = this.primaryBaseUrl;
 
     // Advanced settings with environment variable fallbacks
     // Priority: advancedSettings param > environment variables > hardcoded defaults
@@ -157,6 +295,9 @@ class GeminiService {
       -1,
       32768,
     );
+    this.thinkingLevel = typeof advancedSettings.thinkingLevel === 'string'
+      ? advancedSettings.thinkingLevel.trim().toLowerCase()
+      : String(process.env.GEMINI_THINKING_LEVEL || '').trim().toLowerCase();
 
     // Temperature (default: 0.8)
     this.temperature = clampNumber(
@@ -193,8 +334,113 @@ class GeminiService {
     this._random = typeof advancedSettings.random === 'function' ? advancedSettings.random : Math.random;
   }
 
+  buildRequestHeaders(extraHeaders = {}) {
+    return {
+      'x-goog-api-key': sanitizeApiKeyForHeader(this.apiKey) || '',
+      'x-goog-api-client': GEMINI_CLIENT_HEADER,
+      ...extraHeaders
+    };
+  }
+
+  async request(method, path, data, options = {}) {
+    const makeRequest = async baseUrl => {
+      const requestOptions = {
+        ...options,
+        headers: this.buildRequestHeaders(options.headers || {})
+      };
+      const url = `${baseUrl}${path}`;
+      return method === 'get'
+        ? axios.get(url, requestOptions)
+        : axios.post(url, data, requestOptions);
+    };
+
+    try {
+      return await makeRequest(this.baseUrl);
+    } catch (error) {
+      if (
+        this.fallbackBaseUrl &&
+        this.baseUrl !== this.fallbackBaseUrl &&
+        isGeminiUnsupportedLocation(error)
+      ) {
+        const info = getGeminiErrorInfo(error);
+        log.warn(() => `[Gemini] Primary API egress was rejected (${info.googleStatus || info.statusCode || 'unsupported location'}); retrying through the configured trusted fallback`);
+        const response = await makeRequest(this.fallbackBaseUrl);
+        this.baseUrl = this.fallbackBaseUrl;
+        return response;
+      }
+      throw error;
+    }
+  }
+
   getEffectiveThinkingBudget() {
     return this.isGemmaModel ? 0 : this.thinkingBudget;
+  }
+
+  getGemini3ThinkingLevel(thinkingBudget) {
+    const allowedLevels = new Set(['disabled', 'minimal', 'low', 'medium', 'high']);
+    const requiresLowMinimum = /^gemini-3\.7-flash(?:[-.]|$)/.test(this.model)
+      || this.model.includes('3.1-pro')
+      || this.model === 'gemini-pro-latest';
+    if (allowedLevels.has(this.thinkingLevel)) {
+      const requestedLevel = this.thinkingLevel === 'disabled' ? 'minimal' : this.thinkingLevel;
+      if (requestedLevel === 'minimal' && requiresLowMinimum) {
+        return 'low';
+      }
+      return requestedLevel;
+    }
+    if (!Number.isFinite(thinkingBudget) || thinkingBudget < 0) {
+      return null;
+    }
+    if (thinkingBudget === 0) {
+      return requiresLowMinimum ? 'low' : 'minimal';
+    }
+    if (thinkingBudget <= 2048) {
+      return 'low';
+    }
+    if (thinkingBudget <= 8192) {
+      return 'medium';
+    }
+    return 'high';
+  }
+
+  isThinkingEnabled() {
+    if (this.isGemini3Model) {
+      return !!this.getGemini3ThinkingLevel(this.getEffectiveThinkingBudget());
+    }
+    return this.getEffectiveThinkingBudget() !== 0;
+  }
+
+  buildGenerationConfig(maxOutputTokens) {
+    const generationConfig = { maxOutputTokens };
+    const thinkingBudget = this.getEffectiveThinkingBudget();
+
+    if (this.isGemini3Model) {
+      // Gemini 3.x no longer supports numeric thinking budgets, and Gemini 3.6+
+      // rejects the legacy sampling controls. Keep all 3.x requests on the
+      // documented thinking-level shape so old saved settings remain usable.
+      const thinkingLevel = this.getGemini3ThinkingLevel(thinkingBudget);
+      if (thinkingLevel) {
+        generationConfig.thinkingConfig = { thinkingLevel };
+      }
+      return generationConfig;
+    }
+
+    generationConfig.temperature = this.temperature;
+    generationConfig.topK = this.topK;
+    generationConfig.topP = this.topP;
+
+    if (thinkingBudget === -1) {
+      generationConfig.thinkingConfig = { thinkingBudget: null };
+    } else if (thinkingBudget > 0) {
+      generationConfig.thinkingConfig = { thinkingBudget };
+    } else if (thinkingBudget === 0 && String(this.model).toLowerCase().includes('2.5')) {
+      // Gemini 2.5 distinguishes an explicit zero from an omitted thinking
+      // config. Preserve the user's speed-first choice instead of falling back
+      // to the model's dynamic default.
+      generationConfig.thinkingConfig = { thinkingBudget: 0 };
+    }
+
+    return generationConfig;
   }
 
   /**
@@ -202,9 +448,18 @@ class GeminiService {
    */
   async getAvailableModels(options = {}) {
     const silent = !!options.silent;
+    const throwOnError = options.throwOnError === true;
     const bypassAuthFailureCache = options.bypassAuthFailureCache === true;
+    const cacheAuthFailures = options.cacheAuthFailures !== false;
     if (!bypassAuthFailureCache && await hasCachedProviderAuthFailure(this.authFailureCacheKey)) {
       log.warn(() => '[Gemini] Fetch models blocked: cached invalid API key detected');
+      if (throwOnError) {
+        const cachedError = new Error('Gemini authentication was rejected recently; use explicit key validation to recheck it.');
+        cachedError.statusCode = 401;
+        cachedError.type = 'authentication';
+        cachedError.authError = true;
+        throw cachedError;
+      }
       return [];
     }
 
@@ -214,16 +469,15 @@ class GeminiService {
       let pageCount = 0;
 
       do {
-        const response = await axios.get(`${this.baseUrl}/models`, {
-          // Use header form for API key to avoid query parsing/proxy quirks
-          headers: { 'x-goog-api-key': sanitizeApiKeyForHeader(this.apiKey) || '' },
+        const response = await this.request('get', '/models', null, {
           params: {
             pageSize: 1000,
             ...(pageToken ? { pageToken } : {}),
           },
           timeout: 10000,
           httpAgent,
-          httpsAgent
+          httpsAgent,
+          maxContentLength: MAX_AI_RESPONSE_BYTES
         });
 
         if (Array.isArray(response.data?.models)) {
@@ -258,14 +512,16 @@ class GeminiService {
       return models.length > 0 ? models : this.getDefaultModels();
 
     } catch (error) {
-      if (isGeminiAuthFailure(error)) {
+      decorateGeminiError(error);
+      if (cacheAuthFailures && isGeminiAuthFailure(error)) {
         await cacheProviderAuthFailure(this.authFailureCacheKey);
       }
       if (!silent) {
-        // Log response details to help diagnose issues when not in config UI
-        logApiError(error, 'Gemini', 'Fetch models', { skipResponseData: true });
+        logGeminiFailure(error, 'Fetch models');
       }
-      if (options.throwOnError === true) throw error;
+      if (throwOnError) {
+        throw error;
+      }
       return isGeminiAuthFailure(error) ? [] : this.getDefaultModels();
     }
   }
@@ -292,11 +548,11 @@ class GeminiService {
 
     const loadLimits = (async () => {
       try {
-        const response = await axios.get(`${this.baseUrl}/models/${this.model}`, {
-          headers: { 'x-goog-api-key': sanitizeApiKeyForHeader(this.apiKey) || '' },
+        const response = await this.request('get', `/models/${this.model}`, null, {
           timeout: 10000,
           httpAgent,
-          httpsAgent
+          httpsAgent,
+          maxContentLength: MAX_AI_RESPONSE_BYTES
         });
 
         const data = response.data || {};
@@ -307,31 +563,30 @@ class GeminiService {
 
         // Fallback heuristics by model family if limits are omitted.
         if (!limits.outputTokenLimit) {
-          const modelName = String(this.model).toLowerCase();
-          if (modelName.includes('2.0') || modelName.includes('-flash-001') || modelName.includes('-flash-lite-001')) {
-            limits.outputTokenLimit = 8192;
-          } else if (modelName.includes('2.5') || modelName.includes('3.')) {
-            limits.outputTokenLimit = 65536;
-          } else {
-            limits.outputTokenLimit = 8192;
-          }
+          limits.outputTokenLimit = getFallbackOutputTokenLimit(this.model);
         }
 
         log.debug(() => `[Gemini] Model: ${this.model}, Output limit: ${limits.outputTokenLimit}, Input limit: ${limits.inputTokenLimit || 'unlimited'}`);
 
         const effectiveThinkingBudget = this.getEffectiveThinkingBudget();
-        const thinkingDisplay = effectiveThinkingBudget === -1 ? 'dynamic/high' :
-          effectiveThinkingBudget === 0 ? 'disabled/low' :
+        const thinkingDisplay = effectiveThinkingBudget === -1 ? 'dynamic' :
+          effectiveThinkingBudget === 0 ? 'disabled' :
             effectiveThinkingBudget;
-        log.debug(() => `[Gemini] API config: temperature=${this.temperature}, topK=${this.topK}, topP=${this.topP}, thinkingBudget=${thinkingDisplay}, maxOutputTokens=${this.maxOutputTokens}, timeout=${this.timeout / 1000}s, maxRetries=${this.maxRetries}${this._totalKeys ? `, keys=${this._totalKeys}` : ''}`);
+        const generationControls = this.isGemini3Model
+          ? `thinkingLevel=${this.getGemini3ThinkingLevel(effectiveThinkingBudget) || 'model-default'}`
+          : `temperature=${this.temperature}, topK=${this.topK}, topP=${this.topP}, thinkingBudget=${thinkingDisplay}`;
+        log.debug(() => `[Gemini] API config: ${generationControls}, maxOutputTokens=${this.maxOutputTokens}, timeout=${this.timeout / 1000}s, maxRetries=${this.maxRetries}${this._totalKeys ? `, keys=${this._totalKeys}` : ''}`);
 
         return limits;
       } catch (error) {
-        log.warn(() => ['[Gemini] Could not fetch model limits, using conservative defaults:', error.message]);
-        const modelName = String(this.model).toLowerCase();
+        const info = logGeminiFailure(error, 'Fetch model limits');
+        if (info.type === 'unsupported_location') {
+          throw error;
+        }
+        log.warn(() => '[Gemini] Using conservative model limits after metadata lookup failure');
         const limits = {
           inputTokenLimit: undefined,
-          outputTokenLimit: (modelName.includes('2.5') || modelName.includes('3.')) ? 65536 : 8192
+          outputTokenLimit: getFallbackOutputTokenLimit(this.model)
         };
         log.debug(() => `[Gemini] Fallback limits for ${this.model}: ${limits.outputTokenLimit} output tokens`);
         return limits;
@@ -431,6 +686,25 @@ class GeminiService {
       contentPrompt = `Content to translate:\n\n${content}`;
     }
 
+    // Gemini 3.x uses thinking levels rather than numeric budgets, so determine
+    // this from the request shape instead of the legacy budget alone.
+    if (this.isThinkingEnabled()) {
+      // Find the last "Do NOT" line and add the thinking rules after it
+      const doNotPattern = /(Do NOT include acknowledgements[^\n]+)\n/;
+      if (doNotPattern.test(systemPrompt)) {
+        systemPrompt = systemPrompt.replace(
+          doNotPattern,
+          '$1\nDo NOT overthink. Do NOT overplan.\n'
+        );
+      } else {
+        // Fallback: add before "Output ONLY" if pattern not found
+        systemPrompt = systemPrompt.replace(
+          /\n(Output ONLY)/,
+          '\n\nDo NOT overthink. Do NOT overplan.\n\n$1'
+        );
+      }
+    }
+
     // Keep userPrompt as the full request for token estimation compatibility.
     const userPrompt = `${systemPrompt}\n\n${contentPrompt}`;
     return { userPrompt, systemPrompt, contentPrompt, normalizedTarget };
@@ -444,8 +718,9 @@ class GeminiService {
     const { systemPrompt, contentPrompt } = this.buildUserPrompt(subtitleContent, targetLanguage, customPrompt);
 
     try {
-      const response = await axios.post(
-        `${this.baseUrl}/models/${this.model}:countTokens`,
+      const response = await this.request(
+        'post',
+        `/models/${this.model}:countTokens`,
         {
           systemInstruction: {
             parts: [{ text: systemPrompt }]
@@ -456,10 +731,10 @@ class GeminiService {
           }]
         },
         {
-          headers: { 'x-goog-api-key': sanitizeApiKeyForHeader(this.apiKey) || '' },
           timeout: 10000,
           httpAgent,
-          httpsAgent
+          httpsAgent,
+          maxContentLength: MAX_AI_RESPONSE_BYTES
         }
       );
 
@@ -470,7 +745,7 @@ class GeminiService {
       log.warn(() => '[Gemini] Token count response missing totalTokens, falling back to estimate');
       return null;
     } catch (error) {
-      logApiError(error, 'Gemini', 'Count tokens', { skipResponseData: true });
+      logGeminiFailure(error, 'Count tokens');
       return null;
     }
   }
@@ -519,24 +794,14 @@ class GeminiService {
         }
 
         // Prepare generation config
-        const generationConfig = {
-          maxOutputTokens: estimatedOutputTokens + thinkingReserve
-        };
-        if (!this.modelProfile.omitSamplingParameters) {
-          generationConfig.temperature = this.temperature;
-          generationConfig.topK = this.topK;
-          generationConfig.topP = this.topP;
-        }
+        const generationConfig = this.buildGenerationConfig(estimatedOutputTokens + thinkingReserve);
 
-        // Structured JSON is compatible with thinking and prevents ambiguous
-        // subtitle reconstruction when the JSON workflow is enabled.
-        if (this.enableJsonOutput) {
+        // Current Gemini 3 models support structured JSON together with thinking
+        // levels. Preserve the older defensive behavior for numeric-budget models.
+        if (this.enableJsonOutput && (this.isGemini3Model || !generationConfig.thinkingConfig)) {
           generationConfig.responseMimeType = 'application/json';
           generationConfig.responseSchema = buildSubtitleResponseSchema();
         }
-
-        // Add the model-family-compatible thinking configuration.
-        if (thinkingConfig) generationConfig.thinkingConfig = thinkingConfig;
 
         // Safety settings: disable all content filters for subtitle translation
         // Subtitles contain fictional dialogue that frequently triggers false positives
@@ -551,8 +816,9 @@ class GeminiService {
         ];
 
         // Call Gemini API (use header auth for consistency and security)
-        const response = await axios.post(
-          `${this.baseUrl}/models/${this.model}:generateContent`,
+        const response = await this.request(
+          'post',
+          `/models/${this.model}:generateContent`,
           {
             systemInstruction: {
               parts: [{ text: systemPrompt }]
@@ -567,10 +833,10 @@ class GeminiService {
             safetySettings
           },
           {
-            headers: { 'x-goog-api-key': sanitizeApiKeyForHeader(this.apiKey) || '' },
             timeout: this.timeout,
             httpAgent,
-            httpsAgent
+            httpsAgent,
+            maxContentLength: MAX_AI_RESPONSE_BYTES
           }
         );
 
@@ -663,6 +929,7 @@ class GeminiService {
 
       } catch (error) {
         // Use centralized error handler
+        decorateGeminiError(error);
         handleTranslationError(error, 'Gemini', { skipResponseData: true });
       }
     });
@@ -699,22 +966,13 @@ class GeminiService {
           ));
         }
 
-        const generationConfig = {
-          maxOutputTokens: estimatedOutputTokens + thinkingReserve
-        };
-        if (!this.modelProfile.omitSamplingParameters) {
-          generationConfig.temperature = this.temperature;
-          generationConfig.topK = this.topK;
-          generationConfig.topP = this.topP;
-        }
+        const generationConfig = this.buildGenerationConfig(estimatedOutputTokens + thinkingReserve);
 
-        // Structured JSON remains enabled alongside thinking.
-        if (this.enableJsonOutput) {
+        // Keep streaming request shaping aligned with translateSubtitle.
+        if (this.enableJsonOutput && (this.isGemini3Model || !generationConfig.thinkingConfig)) {
           generationConfig.responseMimeType = 'application/json';
           generationConfig.responseSchema = buildSubtitleResponseSchema();
         }
-
-        if (thinkingConfig) generationConfig.thinkingConfig = thinkingConfig;
 
         // Safety settings: disable all content filters for subtitle translation
         // Use 'OFF' threshold — stronger than 'BLOCK_NONE' and respected by newer models
@@ -726,8 +984,9 @@ class GeminiService {
           { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'OFF' },
         ];
 
-        const response = await axios.post(
-          `${this.baseUrl}/models/${this.model}:streamGenerateContent`,
+        const response = await this.request(
+          'post',
+          `/models/${this.model}:streamGenerateContent`,
           {
             systemInstruction: {
               parts: [{ text: systemPrompt }]
@@ -743,14 +1002,14 @@ class GeminiService {
           },
           {
             headers: {
-              'x-goog-api-key': sanitizeApiKeyForHeader(this.apiKey) || '',
               'Accept': 'text/event-stream'
             },
             params: { alt: 'sse' },
             timeout: this.timeout,
             httpAgent,
             httpsAgent,
-            responseType: 'stream'
+            responseType: 'stream',
+            maxContentLength: MAX_AI_RESPONSE_BYTES
           }
         );
 
@@ -892,6 +1151,7 @@ class GeminiService {
         });
 
       } catch (error) {
+        decorateGeminiError(error);
         handleTranslationError(error, 'Gemini', { skipResponseData: true });
       }
     });
@@ -1012,11 +1272,17 @@ class GeminiService {
 
 module.exports = GeminiService;
 module.exports.DEFAULT_TRANSLATION_PROMPT = DEFAULT_TRANSLATION_PROMPT;
+module.exports.getErrorInfo = getGeminiErrorInfo;
+module.exports.isAuthFailure = isGeminiAuthFailure;
 module.exports.__testing = {
   resetModelCaches() {
     modelLimitsCache.clear();
     modelLimitsInFlight.clear();
   },
   getGeminiErrorMessage,
-  isGeminiAuthFailure
+  isGeminiAuthFailure,
+  isGeminiUnsupportedLocation,
+  getGeminiErrorInfo,
+  normalizeGeminiApiBase,
+  GEMINI_CLIENT_HEADER
 };

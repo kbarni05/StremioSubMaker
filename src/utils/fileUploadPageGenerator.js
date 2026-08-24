@@ -5,6 +5,7 @@ const { quickNavStyles, quickNavScript, renderQuickNav, renderRefreshBadge } = r
 const { version: appVersion } = require('./version');
 const { xsyncMinVersion: REQUIRED_XSYNC_VERSION } = require('../../package.json');
 const { buildClientBootstrap, loadLocale, getTranslator } = require('./i18n');
+const { serializeJsonForInlineScript } = require('./inlineScriptJson');
 
 function safeLanguageMaps() {
     try {
@@ -255,6 +256,8 @@ function generateFileTranslationPage(videoId, configStr, config, filename = '') 
     const advancedModelHelper = t('fileUpload.advanced.model.helper', {}, 'Override the default model for this translation only.');
     const thinkingBudgetLabel = t('fileUpload.advanced.thinking.label', {}, 'Thinking Budget (Extended Reasoning)');
     const thinkingBudgetHelper = t('fileUpload.advanced.thinking.helper', {}, '0 = disabled, -1 = dynamic (auto-adjust), or fixed token count (1-32768).');
+    const thinkingLevelLabel = t('fileUpload.advanced.thinkingLevel.label', {}, 'Thinking Level');
+    const thinkingLevelHelper = t('fileUpload.advanced.thinkingLevel.helper', {}, 'Controls Gemini 3.x reasoning. Minimal is the closest supported option to disabled thinking.');
     const temperatureLabel = t('fileUpload.advanced.temperature.label', {}, 'Temperature (Creativity)');
     const temperatureHelper = t('fileUpload.advanced.temperature.helper', {}, 'Controls randomness (0.0-2.0). Lower = deterministic, Higher = creative. Default: 0.8');
     const reasoningEffortLabel = t('fileUpload.advanced.reasoning.label', {}, 'Reasoning Effort');
@@ -2293,6 +2296,20 @@ function generateFileTranslationPage(videoId, configStr, config, filename = '') 
                                 <input type="number" id="advancedThinkingBudget" min="-1" max="32768" step="1" value="0" placeholder="0">
                             </div>
 
+                            <div class="form-group" id="thinkingLevelGroup" style="display:none;">
+                                <label for="advancedThinkingLevel">
+                                    ${escapeHtml(thinkingLevelLabel)}
+                                    <span class="label-description">${escapeHtml(thinkingLevelHelper)}</span>
+                                </label>
+                                <select id="advancedThinkingLevel">
+                                    <option value="disabled">${escapeHtml(t('fileUpload.advanced.thinkingLevel.disabled', {}, 'Disabled (closest supported)'))}</option>
+                                    <option value="minimal">${escapeHtml(t('fileUpload.advanced.thinkingLevel.minimal', {}, 'Minimal'))}</option>
+                                    <option value="low">${escapeHtml(t('fileUpload.advanced.thinkingLevel.low', {}, 'Low'))}</option>
+                                    <option value="medium">${escapeHtml(t('fileUpload.advanced.thinkingLevel.medium', {}, 'Medium'))}</option>
+                                    <option value="high">${escapeHtml(t('fileUpload.advanced.thinkingLevel.high', {}, 'High'))}</option>
+                                </select>
+                            </div>
+
                             <div class="form-group">
                                 <label for="advancedTemperature">
                                     ${escapeHtml(temperatureLabel)}
@@ -2449,42 +2466,42 @@ function generateFileTranslationPage(videoId, configStr, config, filename = '') 
         <script src="/js/subtitle-menu.js?v=${escapeHtml(appVersion || 'dev')}&_cb=${escapeHtml(appVersion || 'dev')}"></script>
         <script src="/js/combobox.js"></script>
         <script>
-        const clientConfig = ${JSON.stringify(clientConfig)};
-        const providerInfo = ${JSON.stringify(providerSummary)};
-        const configToken = ${JSON.stringify(configStr)};
-        const providerDefaults = ${JSON.stringify(getDefaultProviderParameters())};
-        const PAGE = { configStr: configToken, videoId: ${JSON.stringify(videoId)}, filename: ${JSON.stringify(filename || '')}, videoHash: ${JSON.stringify(config?.videoHash || '')} };
-        const subtitleMenuTargets = ${JSON.stringify(targetLangs)};
+        const clientConfig = ${serializeJsonForInlineScript(clientConfig)};
+        const providerInfo = ${serializeJsonForInlineScript(providerSummary)};
+        const configToken = ${serializeJsonForInlineScript(configStr)};
+        const providerDefaults = ${serializeJsonForInlineScript(getDefaultProviderParameters())};
+        const PAGE = { configStr: configToken, videoId: ${serializeJsonForInlineScript(videoId)}, filename: ${serializeJsonForInlineScript(filename || '')}, videoHash: ${serializeJsonForInlineScript(config?.videoHash || '')} };
+        const subtitleMenuTargets = ${serializeJsonForInlineScript(targetLangs)};
         let subtitleMenuInstance = null;
         let pendingStreamUpdate = null;
-        const uploadQueueLimits = ${JSON.stringify(uploadQueueDefaults)};
-        const translationDefaults = ${JSON.stringify(translationWorkflowDefaults)};
+        const uploadQueueLimits = ${serializeJsonForInlineScript(uploadQueueDefaults)};
+        const translationDefaults = ${serializeJsonForInlineScript(translationWorkflowDefaults)};
         const MAX_OUTPUT_TOKEN_LIMIT = ${MAX_OUTPUT_TOKEN_LIMIT};
         const DEFAULT_MAX_OUTPUT_TOKENS = ${DEFAULT_MAX_OUTPUT_TOKENS};
         ${quickNavScript()}
 
         const localeStrings = {
-            targetPlaceholder: ${JSON.stringify(targetPlaceholderText)},
-            sourceAuto: ${JSON.stringify(sourceAutoDetectText)},
-            queueEmpty: ${JSON.stringify(queueEmpty)},
-            progressHeadline: ${JSON.stringify(progressTitle)},
-            progressQueued: ${JSON.stringify(progressSubtext)},
-            toastTitle: ${JSON.stringify(toastTitle)},
-            toastMeta: ${JSON.stringify(toastMeta)},
-            toastUpdate: ${JSON.stringify(toastUpdate)},
-            toastDismiss: ${JSON.stringify(toastDismiss)},
-            resultTitle: ${JSON.stringify(resultTitleText)},
-            resultBody: ${JSON.stringify(resultBodyText)},
-            downloadCta: ${JSON.stringify(downloadCta)},
-            translateAgain: ${JSON.stringify(translateAgainCta)},
-            startCta: ${JSON.stringify(startTranslationCta)},
-            resetText: ${JSON.stringify(resetBarText)},
-            resetAction: ${JSON.stringify(resetBarCta)},
-            modelStatusUnavailable: ${JSON.stringify(modelStatusUnavailable)},
-            modelStatusFetching: ${JSON.stringify(modelStatusFetching)},
-            modelStatusLoaded: ${JSON.stringify(modelStatusLoaded)},
-            modelStatusEmpty: ${JSON.stringify(modelStatusEmpty)},
-            modelStatusFailed: ${JSON.stringify(modelStatusFailed)}
+            targetPlaceholder: ${serializeJsonForInlineScript(targetPlaceholderText)},
+            sourceAuto: ${serializeJsonForInlineScript(sourceAutoDetectText)},
+            queueEmpty: ${serializeJsonForInlineScript(queueEmpty)},
+            progressHeadline: ${serializeJsonForInlineScript(progressTitle)},
+            progressQueued: ${serializeJsonForInlineScript(progressSubtext)},
+            toastTitle: ${serializeJsonForInlineScript(toastTitle)},
+            toastMeta: ${serializeJsonForInlineScript(toastMeta)},
+            toastUpdate: ${serializeJsonForInlineScript(toastUpdate)},
+            toastDismiss: ${serializeJsonForInlineScript(toastDismiss)},
+            resultTitle: ${serializeJsonForInlineScript(resultTitleText)},
+            resultBody: ${serializeJsonForInlineScript(resultBodyText)},
+            downloadCta: ${serializeJsonForInlineScript(downloadCta)},
+            translateAgain: ${serializeJsonForInlineScript(translateAgainCta)},
+            startCta: ${serializeJsonForInlineScript(startTranslationCta)},
+            resetText: ${serializeJsonForInlineScript(resetBarText)},
+            resetAction: ${serializeJsonForInlineScript(resetBarCta)},
+            modelStatusUnavailable: ${serializeJsonForInlineScript(modelStatusUnavailable)},
+            modelStatusFetching: ${serializeJsonForInlineScript(modelStatusFetching)},
+            modelStatusLoaded: ${serializeJsonForInlineScript(modelStatusLoaded)},
+            modelStatusEmpty: ${serializeJsonForInlineScript(modelStatusEmpty)},
+            modelStatusFailed: ${serializeJsonForInlineScript(modelStatusFailed)}
         };
 
         const tt = (key, vars, fallback) => {
@@ -2547,7 +2564,7 @@ function generateFileTranslationPage(videoId, configStr, config, filename = '') 
             let pingTimer = null;
             let pingAttempts = 0;
             const MAX_PINGS = 5;
-            const REQUIRED_XSYNC_VERSION = ${JSON.stringify(REQUIRED_XSYNC_VERSION)};
+            const REQUIRED_XSYNC_VERSION = ${serializeJsonForInlineScript(REQUIRED_XSYNC_VERSION)};
             const VERSION_WARNING_TEMPLATE = tt(
                 'toolbox.extension.versionOutdated',
                 { detected: '{detected}', required: '{required}' },
@@ -2685,8 +2702,8 @@ function generateFileTranslationPage(videoId, configStr, config, filename = '') 
         const closeResetConfirmBtn = document.getElementById('closeResetConfirmBtn');
 
         // Pre-rendered language option markup (injected from backend list)
-        const languageOptionsMarkup = ${JSON.stringify(languageOptions)};
-        const allLanguageOptionsMarkup = ${JSON.stringify(allLanguageOptions)};
+        const languageOptionsMarkup = ${serializeJsonForInlineScript(languageOptions)};
+        const allLanguageOptionsMarkup = ${serializeJsonForInlineScript(allLanguageOptions)};
 
         // Language lists
         const targetPlaceholderOption = '<option value="">' + localeStrings.targetPlaceholder + '</option>';
@@ -2715,6 +2732,7 @@ function generateFileTranslationPage(videoId, configStr, config, filename = '') 
         const advancedSettingsHeader = document.getElementById('advancedSettingsHeader');
         const advancedModel = document.getElementById('advancedModel');
         const advancedThinkingBudget = document.getElementById('advancedThinkingBudget');
+        const advancedThinkingLevel = document.getElementById('advancedThinkingLevel');
         const advancedTemperature = document.getElementById('advancedTemperature');
         const advancedTopP = document.getElementById('advancedTopP');
         const advancedTopK = document.getElementById('advancedTopK');
@@ -2726,6 +2744,7 @@ function generateFileTranslationPage(videoId, configStr, config, filename = '') 
         const advancedPreserveFormatting = document.getElementById('advancedPreserveFormatting');
         const topKGroup = document.getElementById('topKGroup');
         const thinkingBudgetGroup = document.getElementById('thinkingBudgetGroup');
+        const thinkingLevelGroup = document.getElementById('thinkingLevelGroup');
         const reasoningEffortGroup = document.getElementById('reasoningEffortGroup');
         const formalityGroup = document.getElementById('formalityGroup');
         const preserveFormattingGroup = document.getElementById('preserveFormattingGroup');
@@ -2821,6 +2840,74 @@ function generateFileTranslationPage(videoId, configStr, config, filename = '') 
             return '';
         }
 
+        function isGemini3Model(modelName) {
+            const modelId = String(modelName || '').trim().replace(/^models\\//, '');
+            return /^gemini-3(?:[.-]|$)/i.test(modelId) || /^gemini-(?:flash|flash-lite|pro)-latest$/i.test(modelId);
+        }
+
+        function getSelectedGeminiModel() {
+            return (advancedModel && advancedModel.value ? advancedModel.value.trim() : '')
+                || getConfiguredModelForProvider('gemini');
+        }
+
+        function normalizeGeminiModelId(modelName) {
+            return String(modelName || '').trim().replace(/^models\\//, '').toLowerCase();
+        }
+
+        function getGeminiModelFamilyDefaults(modelName) {
+            const modelId = normalizeGeminiModelId(modelName);
+            const isGemini3 = isGemini3Model(modelId);
+            if (isGemini3 && modelId.includes('flash-lite')) {
+                return { thinkingBudget: 0, thinkingLevel: 'minimal', temperature: 0.8 };
+            }
+            if (isGemini3 && modelId.includes('flash')) {
+                return { thinkingBudget: -1, thinkingLevel: 'high', temperature: 0.5 };
+            }
+            if (isGemini3 && modelId.includes('pro')) {
+                return { thinkingBudget: 1000, thinkingLevel: 'high', temperature: 0.5 };
+            }
+            if (modelId.includes('gemma')) {
+                return { thinkingBudget: 0, thinkingLevel: '', temperature: 0.7 };
+            }
+            if (modelId.includes('flash-lite')) {
+                return { thinkingBudget: 0, thinkingLevel: '', temperature: 0.8 };
+            }
+            if (modelId.includes('flash')) {
+                return { thinkingBudget: -1, thinkingLevel: '', temperature: 0.5 };
+            }
+            if (modelId.includes('pro')) {
+                return { thinkingBudget: 1000, thinkingLevel: '', temperature: 0.5 };
+            }
+            return { thinkingBudget: 0, thinkingLevel: '', temperature: 0.8 };
+        }
+
+        function updateThinkingControls(providerKey) {
+            const normalized = normalizeProviderKey(providerKey);
+            const useThinkingLevel = normalized === 'gemini' && isGemini3Model(getSelectedGeminiModel());
+            const supportsBudget = normalized === 'gemini' || normalized === 'anthropic';
+            if (thinkingBudgetGroup) thinkingBudgetGroup.style.display = supportsBudget && !useThinkingLevel ? '' : 'none';
+            if (thinkingLevelGroup) thinkingLevelGroup.style.display = useThinkingLevel ? '' : 'none';
+        }
+
+        function applyGeminiModelDefaults(modelName) {
+            const selectedModel = normalizeGeminiModelId(modelName);
+            const configuredModel = normalizeGeminiModelId(getConfiguredModelForProvider('gemini'));
+            const params = !selectedModel || selectedModel === configuredModel
+                ? getProviderParamsFor('gemini')
+                : getGeminiModelFamilyDefaults(selectedModel);
+
+            if (advancedThinkingBudget) {
+                advancedThinkingBudget.value = params.thinkingBudget ?? 0;
+            }
+            if (advancedThinkingLevel) {
+                advancedThinkingLevel.value = params.thinkingLevel || 'disabled';
+            }
+            if (advancedTemperature) {
+                advancedTemperature.value = params.temperature ?? 0.8;
+            }
+            updateThinkingControls('gemini');
+        }
+
         function buildProviderOptions() {
             const options = [];
             const seen = new Set();
@@ -2864,6 +2951,7 @@ function generateFileTranslationPage(videoId, configStr, config, filename = '') 
             if (normalized === 'gemini') {
                 return {
                     thinkingBudget: baseAdvancedSettings.thinkingBudget ?? 0,
+                    thinkingLevel: baseAdvancedSettings.thinkingLevel || '',
                     temperature: baseAdvancedSettings.temperature ?? 0.8,
                     topP: baseAdvancedSettings.topP ?? 0.95,
                     topK: baseAdvancedSettings.topK ?? 40,
@@ -3059,9 +3147,7 @@ function generateFileTranslationPage(videoId, configStr, config, filename = '') 
             const params = getProviderParamsFor(normalized);
             const caps = getProviderCapabilities(normalized);
 
-            if (thinkingBudgetGroup) {
-                thinkingBudgetGroup.style.display = caps.supportsThinking ? '' : 'none';
-            }
+            updateThinkingControls(normalized);
             if (reasoningEffortGroup) {
                 reasoningEffortGroup.style.display = caps.supportsReasoning ? '' : 'none';
             }
@@ -3097,6 +3183,9 @@ function generateFileTranslationPage(videoId, configStr, config, filename = '') 
 
             if (advancedThinkingBudget && caps.supportsThinking) {
                 advancedThinkingBudget.value = params.thinkingBudget ?? 0;
+            }
+            if (advancedThinkingLevel && normalized === 'gemini') {
+                advancedThinkingLevel.value = params.thinkingLevel || 'disabled';
             }
             if (advancedTemperature && caps.supportsTemperature) {
                 advancedTemperature.value = params.temperature ?? 0.8;
@@ -3294,6 +3383,16 @@ function generateFileTranslationPage(videoId, configStr, config, filename = '') 
                 if (advancedSettings.classList.contains('expanded') && !fetchedModels.has(selected)) {
                     fetchModels(selected);
                 }
+            });
+        }
+
+        if (advancedModel) {
+            advancedModel.addEventListener('change', () => {
+                if (activeProviderKey === 'gemini') {
+                    applyGeminiModelDefaults(advancedModel.value);
+                    return;
+                }
+                updateThinkingControls(activeProviderKey);
             });
         }
 
@@ -3667,9 +3766,13 @@ function generateFileTranslationPage(videoId, configStr, config, filename = '') 
             }
 
             const selectedModel = advancedModel && advancedModel.value ? advancedModel.value.trim() : '';
-            const thinkingBudget = caps.supportsThinking
+            const usesThinkingLevel = providerKey === 'gemini' && isGemini3Model(selectedModel || getConfiguredModelForProvider('gemini'));
+            const thinkingBudget = caps.supportsThinking && !usesThinkingLevel
                 ? readBoundedNumber(advancedThinkingBudget, -1, 32768, (v) => parseInt(v, 10))
                 : null;
+            const thinkingLevel = usesThinkingLevel && advancedThinkingLevel
+                ? String(advancedThinkingLevel.value || '').trim().toLowerCase()
+                : '';
             const temperature = caps.supportsTemperature
                 ? readBoundedNumber(advancedTemperature, 0, 2, (v) => parseFloat(v))
                 : null;
@@ -3701,6 +3804,9 @@ function generateFileTranslationPage(videoId, configStr, config, filename = '') 
             if (caps.supportsThinking && Number.isFinite(thinkingBudget)) {
                 providerOverrides.thinkingBudget = thinkingBudget;
             }
+            if (usesThinkingLevel && ['disabled', 'minimal', 'low', 'medium', 'high'].includes(thinkingLevel)) {
+                providerOverrides.thinkingLevel = thinkingLevel;
+            }
             if (caps.supportsReasoning && reasoningEffort) {
                 providerOverrides.reasoningEffort = reasoningEffort;
             }
@@ -3713,6 +3819,7 @@ function generateFileTranslationPage(videoId, configStr, config, filename = '') 
                 ? {
                     geminiModel: selectedModel || clientConfig.geminiModel || '',
                     thinkingBudget: Number.isFinite(thinkingBudget) ? thinkingBudget : undefined,
+                    thinkingLevel: usesThinkingLevel ? thinkingLevel : undefined,
                     temperature: Number.isFinite(temperature) ? temperature : undefined,
                     topP: Number.isFinite(topP) ? topP : undefined,
                     topK: Number.isFinite(topK) ? topK : undefined,

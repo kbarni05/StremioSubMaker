@@ -26,6 +26,7 @@ test('retired Gemini model names migrate to supported replacements', () => {
   assert.equal(normalized.advancedSettings.geminiModel, 'gemini-3.6-flash');
   assert.deepEqual(getModelSpecificDefaults('gemini-3.8-flash-preview'), {
     thinkingBudget: -1,
+    thinkingLevel: 'high',
     temperature: 0.5
   });
 });

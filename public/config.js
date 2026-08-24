@@ -8,6 +8,16 @@
     const FLOATING_BOTTOM_SAFE_ZONE_SELECTOR = '#configHelp, #subToolboxLauncher, #tokenVaultLauncher, #tokenVaultRail.show';
     let locale = DEFAULT_LOCALE;
     let localeReadyPromise = null; // Track when locale is ready
+    let localeApplySequence = 0;
+    const localeFetchPromises = new Map();
+
+    function normalizeSupportedUiLanguage(value) {
+        const normalized = String(value || 'en').trim().toLowerCase().replace(/_/g, '-');
+        if (normalized === 'pt' || normalized === 'pt-br' || normalized.startsWith('pt-br-')) return 'pt-br';
+        if (normalized === 'pt-pt' || normalized.startsWith('pt-pt-')) return 'pt-pt';
+        const base = normalized.split('-')[0];
+        return ['en', 'es', 'ar', 'hu'].includes(base) ? base : 'en';
+    }
 
     function bootstrapTranslator(payload) {
         try {
@@ -42,6 +52,7 @@
     }
 
     async function initLocale(langOverride) {
+        const applySequence = ++localeApplySequence;
         try {
             const url = new URL(window.location.href);
             const configParam = url.searchParams.get('config');
@@ -52,17 +63,36 @@
                     if (stored) langParam = stored;
                 } catch (_) { }
             }
+            langParam = normalizeSupportedUiLanguage(langParam || navigator.language || DEFAULT_LOCALE.lang);
             const query = [];
             if (configParam) query.push('config=' + encodeURIComponent(configParam));
             if (langParam) query.push('lang=' + encodeURIComponent(langParam));
-            const resp = await fetch('/api/locale' + (query.length ? ('?' + query.join('&')) : ''), { cache: 'no-store' });
-            const data = await resp.json();
+            const requestUrl = '/api/locale' + (query.length ? ('?' + query.join('&')) : '');
+            let localeFetchPromise = localeFetchPromises.get(requestUrl);
+            if (!localeFetchPromise) {
+                const pending = fetch(requestUrl).then((resp) => {
+                    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                    return resp.json();
+                });
+                let sharedPromise;
+                sharedPromise = pending.catch((error) => {
+                    if (localeFetchPromises.get(requestUrl) === sharedPromise) {
+                        localeFetchPromises.delete(requestUrl);
+                    }
+                    throw error;
+                });
+                localeFetchPromises.set(requestUrl, sharedPromise);
+                localeFetchPromise = sharedPromise;
+            }
+            const data = await localeFetchPromise;
+            if (applySequence !== localeApplySequence) return;
             bootstrapTranslator(data || DEFAULT_LOCALE);
             applyUiLanguageCopy();
             applyStaticCopy();
             refreshLocalizedDynamicUi();
             notifyLocaleUpdated();
         } catch (err) {
+            if (applySequence !== localeApplySequence) return;
             console.warn('[i18n] Failed to load locale, falling back to English', err);
             bootstrapTranslator(DEFAULT_LOCALE);
             applyUiLanguageCopy();
@@ -334,21 +364,6 @@
     };
     if (typeof window !== 'undefined') {
         window.SubMakerDefaultApiKeys = Object.freeze({ ...DEFAULT_API_KEYS });
-    }
-
-    function normalizeWyzieSourceConfig(sourceConfig) {
-        const raw = (sourceConfig && typeof sourceConfig === 'object') ? sourceConfig : {};
-        return {
-            opensubtitles: raw.opensubtitles === true || raw.opensubs === true,
-            subf2m: raw.subf2m === true,
-            subdl: raw.subdl === true,
-            podnapisi: raw.podnapisi === true,
-            gestdown: raw.gestdown === true,
-            animetosho: raw.animetosho === true,
-            kitsunekko: raw.kitsunekko === true,
-            jimaku: raw.jimaku === true,
-            yify: raw.yify === true
-        };
     }
 
     // Popular languages for quick selection
@@ -784,9 +799,9 @@
     function getPreferredUiLanguage() {
         try {
             const stored = localStorage.getItem(UI_LANGUAGE_STORAGE_KEY);
-            if (stored) return stored.toLowerCase();
+            if (stored) return normalizeSupportedUiLanguage(stored);
         } catch (_) { }
-        return (navigator.language || 'en').toLowerCase();
+        return normalizeSupportedUiLanguage(navigator.language || 'en');
     }
 
     function toFlagEmoji(raw) {
@@ -820,6 +835,28 @@
         };
     }
 
+    const UI_LANGUAGE_FLAG_SVG = Object.freeze({
+        en: '<svg viewBox="0 0 28 20" xmlns="http://www.w3.org/2000/svg"><rect width="28" height="20" fill="#fff"/><path d="M0 0h28v2H0zm0 4h28v2H0zm0 4h28v2H0zm0 4h28v2H0zm0 4h28v2H0z" fill="#b22234"/><rect width="12" height="10.8" fill="#3c3b6e"/><g fill="#fff"><circle cx="2" cy="2" r=".65"/><circle cx="6" cy="2" r=".65"/><circle cx="10" cy="2" r=".65"/><circle cx="4" cy="5.2" r=".65"/><circle cx="8" cy="5.2" r=".65"/><circle cx="2" cy="8.4" r=".65"/><circle cx="6" cy="8.4" r=".65"/><circle cx="10" cy="8.4" r=".65"/></g></svg>',
+        es: '<svg viewBox="0 0 28 20" xmlns="http://www.w3.org/2000/svg"><rect width="28" height="20" fill="#aa151b"/><rect y="5" width="28" height="10" fill="#f1bf00"/><circle cx="9" cy="10" r="1.7" fill="#aa151b"/><rect x="8.4" y="8.2" width="1.2" height="3.6" rx=".3" fill="#f1bf00"/></svg>',
+        'pt-br': '<svg viewBox="0 0 28 20" xmlns="http://www.w3.org/2000/svg"><rect width="28" height="20" fill="#009b3a"/><path d="m14 2 11 8-11 8L3 10z" fill="#ffdf00"/><circle cx="14" cy="10" r="4.2" fill="#002776"/><path d="M10.4 9.2c2.8-.8 5.5-.3 7.6 1.1" fill="none" stroke="#fff" stroke-width=".75"/></svg>',
+        'pt-pt': '<svg viewBox="0 0 28 20" xmlns="http://www.w3.org/2000/svg"><rect width="11" height="20" fill="#046a38"/><rect x="11" width="17" height="20" fill="#da291c"/><circle cx="11" cy="10" r="3.4" fill="none" stroke="#ffcd00" stroke-width="1.2"/><path d="M9.2 8.2h3.6v3.6H9.2z" fill="#fff" stroke="#da291c" stroke-width=".6"/></svg>',
+        ar: '<svg viewBox="0 0 28 20" xmlns="http://www.w3.org/2000/svg"><rect width="28" height="20" fill="#006c35"/><path d="M7 8.2h14M9 11.7h10" stroke="#fff" stroke-width="1.2" stroke-linecap="round"/><path d="m8 14 11-1.4" stroke="#fff" stroke-width=".8" stroke-linecap="round"/></svg>',
+        hu: '<svg viewBox="0 0 28 20" xmlns="http://www.w3.org/2000/svg"><rect width="28" height="20" fill="#fff"/><rect width="28" height="6.667" fill="#ce2939"/><rect y="13.333" width="28" height="6.667" fill="#477050"/></svg>'
+    });
+
+    function createUiLanguageFlagIcon(language, fallbackLabel) {
+        const icon = document.createElement('span');
+        icon.className = 'ui-lang-flag-icon';
+        icon.setAttribute('aria-hidden', 'true');
+        const markup = UI_LANGUAGE_FLAG_SVG[language];
+        if (markup) {
+            icon.innerHTML = markup;
+        } else {
+            icon.textContent = fallbackLabel || String(language || '').toUpperCase();
+        }
+        return icon;
+    }
+
     function getUiLanguageMeta(lang) {
         const normalized = (lang || '').toString().toLowerCase();
         const exact = SUPPORTED_UI_LANGUAGES.find(l => l.value === normalized);
@@ -837,7 +874,7 @@
         }
         const flagEl = document.getElementById('uiLanguageFlag');
         if (flagEl) {
-            flagEl.textContent = meta.flag || '🏳️';
+            flagEl.textContent = meta.label || meta.value.toUpperCase();
         }
         const dock = document.getElementById('uiLanguageDock');
         if (dock) {
@@ -986,6 +1023,7 @@ Translate to {target_language}.`;
      * Each model has its own optimal settings for thinking and temperature
      */
     const GEMINI_31_FLASH_LITE_MODEL = 'gemini-3.1-flash-lite';
+    const GEMINI_FLASH_LATEST_MODEL = 'gemini-flash-latest';
     const DEFAULT_GEMINI_MODEL = GEMINI_31_FLASH_LITE_MODEL;
     const GEMINI_MODEL_MIGRATIONS = Object.freeze({
         'gemini-3.1-flash-lite-preview': GEMINI_31_FLASH_LITE_MODEL,
@@ -1000,6 +1038,7 @@ Translate to {target_language}.`;
         'gemini-2.5-pro-latest': 'gemini-3.1-pro-preview',
         'gemini-3-flash-preview': 'gemini-3.6-flash',
         'gemini-3-pro-preview': 'gemini-3.1-pro-preview',
+        [GEMINI_FLASH_LATEST_MODEL]: DEFAULT_GEMINI_MODEL,
         'gemini-pro-latest': 'gemini-3.1-pro-preview'
     });
 
@@ -1014,38 +1053,59 @@ Translate to {target_language}.`;
             || normalized === 'gemini-2.0-flash-exp';
     }
 
+    function isGemini3ModelName(modelName) {
+        const modelId = normalizeGeminiModelName(modelName);
+        return /^gemini-3(?:[.-]|$)/i.test(modelId) || /^gemini-(?:flash|flash-lite|pro)-latest$/i.test(modelId);
+    }
+
+    function sanitizeGeminiThinkingLevel(value, fallback = '') {
+        const allowed = ['disabled', 'minimal', 'low', 'medium', 'high'];
+        const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
+        if (allowed.includes(normalized)) return normalized;
+        const normalizedFallback = typeof fallback === 'string' ? fallback.trim().toLowerCase() : '';
+        return allowed.includes(normalizedFallback) ? normalizedFallback : '';
+    }
+
     const MODEL_SPECIFIC_DEFAULTS = {
 
+        'gemini-3.1-flash-lite': {
+            thinkingBudget: 0,
+            thinkingLevel: 'minimal',
+            temperature: 0.8
+        },
+        'gemini-3.5-flash-lite': {
+            thinkingBudget: 0,
+            thinkingLevel: 'minimal',
+            temperature: 0.8
+        },
         'gemini-3.5-flash': {
             thinkingBudget: -1,
+            thinkingLevel: 'high',
             temperature: 0.5
         },
         'gemini-3.6-flash': {
             thinkingBudget: -1,
+            thinkingLevel: 'high',
             temperature: 0.5
         },
         'gemini-3.7-flash': {
             thinkingBudget: -1,
+            thinkingLevel: 'high',
             temperature: 0.5
-        },
-        'gemini-3.5-flash-lite': {
-            thinkingBudget: 0,
-            temperature: 0.8
-        },
-        'gemini-3.1-flash-lite': {
-            thinkingBudget: 0,
-            temperature: 0.8
         },
         'gemini-flash-lite-latest': {
             thinkingBudget: 0,
-            temperature: 1
+            thinkingLevel: 'minimal',
+            temperature: 0.8
         },
         'gemini-flash-latest': {
             thinkingBudget: 0,
-            temperature: 1
+            thinkingLevel: 'minimal',
+            temperature: 0.8
         },
         'gemini-3.1-pro-preview': {
             thinkingBudget: 8192,
+            thinkingLevel: 'high',
             temperature: 1
         }
     };
@@ -1057,19 +1117,33 @@ Translate to {target_language}.`;
      */
     function getModelSpecificDefaults(modelName) {
         const normalized = normalizeGeminiModelName(modelName).toLowerCase();
-        if (MODEL_SPECIFIC_DEFAULTS[normalized]) {
-            return { ...MODEL_SPECIFIC_DEFAULTS[normalized] };
+        const exactDefaults = MODEL_SPECIFIC_DEFAULTS[normalized];
+        if (exactDefaults) return { ...exactDefaults };
+
+        const isGemini3 = /^gemini-3(?:[.-]|$)/.test(normalized)
+            || /^gemini-(?:flash|flash-lite|pro)-latest$/.test(normalized);
+        if (isGemini3 && normalized.includes('flash-lite')) {
+            return { thinkingBudget: 0, thinkingLevel: 'minimal', temperature: 0.8 };
         }
-        if (/^gemini-3(?:[.-]|$)/.test(normalized) && normalized.includes('flash-lite')) {
-            return { thinkingBudget: 0, temperature: 0.8 };
+        if (isGemini3 && normalized.includes('flash')) {
+            return { thinkingBudget: -1, thinkingLevel: 'high', temperature: 0.5 };
         }
-        if (/^gemini-3(?:[.-]|$)/.test(normalized) && normalized.includes('flash')) {
-            return { thinkingBudget: -1, temperature: 0.5 };
+        if (isGemini3 && normalized.includes('pro')) {
+            return { thinkingBudget: 8192, thinkingLevel: 'high', temperature: 1 };
         }
-        if (/^gemini-3(?:[.-]|$)/.test(normalized) && normalized.includes('pro')) {
-            return { thinkingBudget: 8192, temperature: 1 };
+        if (normalized.includes('gemma')) {
+            return { thinkingBudget: 0, thinkingLevel: '', temperature: 0.7 };
         }
-        return { thinkingBudget: 0, temperature: 0.8 };
+        if (normalized.includes('flash-lite')) {
+            return { thinkingBudget: 0, thinkingLevel: '', temperature: 0.8 };
+        }
+        if (normalized.includes('flash')) {
+            return { thinkingBudget: -1, thinkingLevel: '', temperature: 0.5 };
+        }
+        if (normalized.includes('pro')) {
+            return { thinkingBudget: 1000, thinkingLevel: '', temperature: 0.5 };
+        }
+        return { thinkingBudget: 0, thinkingLevel: '', temperature: 0.8 };
     }
 
     function getVisibleGeminiModelOptions() {
@@ -1146,6 +1220,22 @@ Translate to {target_language}.`;
             getModelSpecificDefaults,
             normalizeBaseModel: normalizeGeminiModelForBaseSelect
         };
+    }
+
+    function getAdvancedGeminiModelValue() {
+        const advancedModel = document.getElementById('advancedModel')?.value || '';
+        const baseModel = document.getElementById('geminiModel')?.value || DEFAULT_GEMINI_MODEL;
+        return normalizeGeminiModelName(advancedModel || baseModel);
+    }
+
+    function updateGeminiThinkingControl() {
+        const model = getAdvancedGeminiModelValue();
+        const usesThinkingLevel = isGemini3ModelName(model);
+        const budgetGroup = document.getElementById('advancedThinkingBudgetGroup');
+        const levelGroup = document.getElementById('advancedThinkingLevelGroup');
+
+        if (budgetGroup) budgetGroup.style.display = usesThinkingLevel ? 'none' : '';
+        if (levelGroup) levelGroup.style.display = usesThinkingLevel ? '' : 'none';
     }
 
     function getDefaultProviderParameters() {
@@ -1319,6 +1409,7 @@ Translate to {target_language}.`;
                 enabled: false, // Auto-set to true if any setting differs from defaults (forces bypass cache)
                 geminiModel: '', // Override model (empty = use default)
                 thinkingBudget: modelDefaults.thinkingBudget,
+                thinkingLevel: modelDefaults.thinkingLevel,
                 temperature: modelDefaults.temperature,
                 topP: 0.95,
                 topK: 40,
@@ -1423,6 +1514,7 @@ Translate to {target_language}.`;
     let configDirty = false;
     let revealedInstallToken = '';
     let suppressDirtyTracking = true;
+    let modelDiscoveryTokenPromise = null;
 
     // Visual state cache keys that can be safely reset on version changes
     const VISUAL_STATE_KEYS = [
@@ -2319,6 +2411,8 @@ Translate to {target_language}.`;
         '__decryptionWarningFields',
         '__nestedEncryptionRecovered',
         '__nestedEncryptionRecoveredFields',
+        '__plaintextSensitiveFieldsDetected',
+        '__plaintextSensitiveFieldsDetectedFields',
         '__credentialDecryptionFailed',
         '__credentialDecryptionFailedFields',
         '__credentialWarningEntry',
@@ -2389,6 +2483,53 @@ Translate to {target_language}.`;
             throw error;
         } finally {
             clearTimeout(timeoutId);
+        }
+    }
+
+    async function ensureModelDiscoveryConfigToken() {
+        const activeToken = getActiveConfigRef();
+        if (isValidSessionToken(activeToken)) return activeToken;
+        if (modelDiscoveryTokenPromise) return modelDiscoveryTokenPromise;
+
+        // Discovery now requires a live session capability. Reserve the same
+        // token that the normal Save flow will later update, but persist only
+        // harmless defaults here so entering/testing a raw key does not save it.
+        modelDiscoveryTokenPromise = (async () => {
+            const provisionalConfig = getDefaultConfig();
+            provisionalConfig.uiLanguage = (currentConfig?.uiLanguage || locale.lang || navigator.language || 'en')
+                .toString()
+                .toLowerCase();
+
+            const response = await fetchWithTimeout('/api/create-session', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(provisionalConfig)
+            }, 10000);
+            const data = await response.json().catch(() => ({}));
+            const token = extractSessionTokenFromInput(data?.token);
+            if (!response.ok || !isValidSessionToken(token)) {
+                throw new Error(data?.error || response.statusText || 'Could not authorize model discovery');
+            }
+
+            try { localStorage.setItem(TOKEN_KEY, token); } catch (_) { }
+            setActiveSessionContext({
+                token,
+                provenance: 'provisional',
+                sourceLabel: 'Reserved for configuration checks',
+                message: 'Save to apply the settings currently shown on this page.',
+                session: data?.session || null,
+                recoveredFromToken: '',
+                regenerated: false
+            });
+            syncConfigUrlForToken(token);
+            updateTokenVaultButtonState();
+            return token;
+        })();
+
+        try {
+            return await modelDiscoveryTokenPromise;
+        } finally {
+            modelDiscoveryTokenPromise = null;
         }
     }
 
@@ -3933,7 +4074,7 @@ Translate to {target_language}.`;
         showLoading(true);
         try {
             const cacheBuster = `_cb=${Date.now()}`;
-            const response = await fetchWithTimeout(`/api/get-session/${encodeURIComponent(token)}?${cacheBuster}&autoRegenerate=true`, {
+            const response = await fetchWithTimeout(`/api/get-session/${encodeURIComponent(token)}?${cacheBuster}`, {
                 cache: 'no-store',
                 headers: {
                     'Cache-Control': 'no-cache, no-store, must-revalidate',
@@ -5202,6 +5343,7 @@ Translate to {target_language}.`;
     function renderUiLanguageFlags(selectedLang) {
         const { dock, row: container } = ensureUiLanguageDockExists();
         if (!container) return;
+        container.removeAttribute('data-preboot');
 
         const activeMeta = getUiLanguageMeta(selectedLang || currentConfig?.uiLanguage || getPreferredUiLanguage());
         const labelText = tConfig('config.uiLanguageLabel', {}, 'Interface language');
@@ -5224,7 +5366,7 @@ Translate to {target_language}.`;
             btn.setAttribute('aria-pressed', meta.value === activeMeta.value ? 'true' : 'false');
             btn.setAttribute('aria-label', ariaPrefix + (meta.label || meta.value.toUpperCase()));
             btn.title = meta.label || meta.value.toUpperCase();
-            btn.textContent = meta.flag || meta.value.toUpperCase();
+            btn.appendChild(createUiLanguageFlagIcon(meta.value, meta.label));
             btn.addEventListener('click', () => {
                 const current = (currentConfig && currentConfig.uiLanguage) || '';
                 if (meta.value === current) return;
@@ -5243,7 +5385,7 @@ Translate to {target_language}.`;
     }
 
     function setUiLanguage(lang) {
-        const normalized = (lang || '').toString().trim().toLowerCase() || 'en';
+        const normalized = normalizeSupportedUiLanguage(lang);
         if (!currentConfig) {
             currentConfig = getDefaultConfig();
         }
@@ -5467,6 +5609,7 @@ Translate to {target_language}.`;
         // Identify which session token should scope any cached config usage
         const persistentSessionToken = getStoredSessionToken() || null;
         const intendedToken = urlSessionToken || persistentSessionToken || null;
+        let initialSessionHydrationPending = false;
 
         // Priority: cached config (for this token) > live session fetch (URL token or stored token) > default config.
         const cachedConfig = await loadConfigFromCache(intendedToken);
@@ -5497,12 +5640,22 @@ Translate to {target_language}.`;
                 });
             }
         } else if (loadPlan.shouldFetchSession) {
+            initialSessionHydrationPending = true;
             const sessionToken = loadPlan.fetchToken;
             const loadedFromUrl = loadPlan.hasExplicitUrlConfig === true;
             const hasCachedFallback = !!cachedConfig;
             const fallbackConfig = cachedConfig || urlConfig;
             const fallbackCopy = hasCachedFallback ? 'Using the last local copy for now.' : 'Using a fresh draft for now.';
             currentConfig = fallbackConfig;
+            setActiveSessionContext({
+                token: sessionToken,
+                provenance: loadedFromUrl ? 'url' : 'local',
+                sourceLabel: loadedFromUrl ? 'Loading shared URL' : 'Loading saved token',
+                message: 'The local page is ready while the live profile refreshes in the background.',
+                session: null,
+                recoveredFromToken: '',
+                regenerated: false
+            });
             syncTokenVaultEntryWithBrief(sessionToken, null, { lastOpenedAt: Date.now(), makeActive: true }, { ifExistsOnly: true });
 
             const applySessionLoadFailurePlan = (failureType, alertMessage, options = {}) => {
@@ -5517,10 +5670,12 @@ Translate to {target_language}.`;
                     try { localStorage.removeItem(TOKEN_KEY); } catch (_) { }
                 }
 
-                if (plan.configSource === 'cache' && hasCachedFallback) {
-                    currentConfig = cachedConfig;
-                } else {
-                    currentConfig = options.defaultConfig || getDefaultConfig();
+                if (!configDirty) {
+                    if (plan.configSource === 'cache' && hasCachedFallback) {
+                        currentConfig = cachedConfig;
+                    } else {
+                        currentConfig = options.defaultConfig || getDefaultConfig();
+                    }
                 }
 
                 const nextContext = {
@@ -5538,9 +5693,13 @@ Translate to {target_language}.`;
                 }
             };
 
-            try {
+            // Do not make remote storage part of first render. This request may
+            // take seconds during pod/Redis cold starts, but the local/default
+            // UI remains interactive and is hydrated when the response arrives.
+            const hydrateInitialSession = async () => {
+              try {
                 const cacheBuster = `_cb=${Date.now()}`;
-                const resp = await fetchWithTimeout(`/api/get-session/${sessionToken}?${cacheBuster}&autoRegenerate=true`, {
+                const resp = await fetchWithTimeout(`/api/get-session/${sessionToken}?${cacheBuster}`, {
                     cache: 'no-store',
                     headers: {
                         'Cache-Control': 'no-cache, no-store, must-revalidate',
@@ -5600,6 +5759,20 @@ Translate to {target_language}.`;
                         return;
                     }
 
+                    if (configDirty) {
+                        setActiveSessionContext({
+                            token: '',
+                            provenance: 'draft',
+                            sourceLabel: 'Edited local draft',
+                            message: 'The live profile arrived after editing began, so this draft was kept instead of being overwritten.',
+                            session: null,
+                            recoveredFromToken: sessionToken,
+                            regenerated: false
+                        });
+                        showAlert('The live profile finished loading after you began editing. Your local draft was kept.', 'info');
+                        return;
+                    }
+
                     currentConfig = data.config;
 
                     if (data.regenerated && data.token && data.token !== sessionToken) {
@@ -5642,7 +5815,7 @@ Translate to {target_language}.`;
                         }, { ifExistsOnly: true });
                     }
                 }
-            } catch (e) {
+              } catch (e) {
                 console.warn('[Config] Failed to fetch session:', e);
                 applySessionLoadFailurePlan(
                     'network',
@@ -5657,7 +5830,27 @@ Translate to {target_language}.`;
                         }
                     }
                 );
-            }
+              }
+            };
+
+            hydrateInitialSession().then(() => {
+                initialSessionHydrationPending = false;
+                if (!configDirty) {
+                    applyCurrentConfigToPage();
+                    setConfigDirty(false);
+                    const hydratedApiKey = document.getElementById('geminiApiKey')?.value?.trim() || '';
+                    if (hydratedApiKey) {
+                        Promise.resolve().then(() => autoFetchModels(hydratedApiKey)).catch(() => { });
+                    }
+                }
+                if (isValidSessionToken(activeSessionContext.token)) {
+                    Promise.resolve().then(() => refreshTokenVaultData({ background: true })).catch(() => { });
+                }
+                try { performance.mark('submaker:remote-config-settled'); } catch (_) { }
+            }).catch((error) => {
+                initialSessionHydrationPending = false;
+                console.warn('[Config] Failed to apply initial session hydration:', error);
+            });
         }
         // else: currentConfig stays as a fresh template until the first save
 
@@ -5683,6 +5876,7 @@ Translate to {target_language}.`;
             });
         }
 
+        currentConfig.uiLanguage = normalizeSupportedUiLanguage(currentConfig.uiLanguage || locale.lang || navigator.language);
         currentConfig.betaModeEnabled = currentConfig.betaModeEnabled === true;
         ensureProvidersInState();
         ensureProviderParametersInState();
@@ -5717,6 +5911,10 @@ Translate to {target_language}.`;
         const activeUiLang = currentConfig.uiLanguage || locale.lang || 'en';
         renderUiLanguageFlags(activeUiLang);
         try { localStorage.setItem(UI_LANGUAGE_STORAGE_KEY, activeUiLang); } catch (_) { }
+        try {
+            document.documentElement.dataset.configUiReady = 'true';
+            performance.mark('submaker:essential-ui-ready');
+        } catch (_) { }
 
         // Kick off language loading without blocking UI/modals
         loadLanguages().catch(err => {
@@ -5756,7 +5954,7 @@ Translate to {target_language}.`;
                 bindTokenVaultUiEventListeners();
             }).catch(() => { });
         }
-        if (isValidSessionToken(activeSessionContext.token)) {
+        if (!initialSessionHydrationPending && isValidSessionToken(activeSessionContext.token)) {
             Promise.resolve().then(() => refreshTokenVaultData({ background: true })).catch(() => { });
         }
         setupKeyboardShortcuts();
@@ -5779,6 +5977,7 @@ Translate to {target_language}.`;
         window.addEventListener('resize', debounce(scheduleTokenVaultRailFloatingMenuSync, 40));
         window.addEventListener('resize', debounce(() => updateBodyScrollLock(true), 80));
         suppressDirtyTracking = false;
+        try { performance.mark('submaker:config-ui-interactive'); } catch (_) { }
     }
 
     function normalizeLanguageCodes(codes) {
@@ -6506,18 +6705,23 @@ Translate to {target_language}.`;
 
         const advModelEl = document.getElementById('advancedModel');
         const advThinkingEl = document.getElementById('advancedThinkingBudget');
+        const advThinkingLevelEl = document.getElementById('advancedThinkingLevel');
         const advTempEl = document.getElementById('advancedTemperature');
         const advTopPEl = document.getElementById('advancedTopP');
         const batchCtxEl = document.getElementById('enableBatchContext');
         const ctxSizeEl = document.getElementById('contextSize');
 
-        if (!advModelEl || !advThinkingEl || !advTempEl || !advTopPEl) {
+        if (!advModelEl || !advThinkingEl || !advThinkingLevelEl || !advTempEl || !advTopPEl) {
             return false; // Elements not loaded yet
         }
 
         // Check if any value differs from model-specific defaults
         const modelChanged = advModelEl.value !== (defaults.geminiModel || '');
-        const thinkingChanged = parseInt(advThinkingEl.value) !== defaults.thinkingBudget;
+        const activeModel = normalizeGeminiModelName(advModelEl.value || currentBaseModel);
+        const activeModelDefaults = getModelSpecificDefaults(activeModel);
+        const thinkingChanged = isGemini3ModelName(activeModel)
+            ? sanitizeGeminiThinkingLevel(advThinkingLevelEl.value) !== activeModelDefaults.thinkingLevel
+            : parseInt(advThinkingEl.value) !== activeModelDefaults.thinkingBudget;
         const tempChanged = parseFloat(advTempEl.value) !== defaults.temperature;
         const topPChanged = parseFloat(advTopPEl.value) !== defaults.topP;
         // Batch context changes are also considered advanced modifications
@@ -6574,34 +6778,13 @@ Translate to {target_language}.`;
 
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
             try {
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-
-                // Fetch both endpoints in parallel
-                const [providerResponse, translationResponse] = await Promise.all([
-                    fetch('/api/languages', {
-                        signal: controller.signal,
-                        method: 'GET',
-                        headers: { 'Accept': 'application/json' }
-                    }),
-                    fetch('/api/languages/translation', {
-                        signal: controller.signal,
-                        method: 'GET',
-                        headers: { 'Accept': 'application/json' }
-                    })
-                ]);
-
-                clearTimeout(timeoutId);
-
-                if (!providerResponse.ok) {
-                    throw new Error(`HTTP ${providerResponse.status}: ${providerResponse.statusText}`);
+                if (!configPageState || typeof configPageState.loadLanguageCatalogs !== 'function') {
+                    throw new Error('Language catalog loader is unavailable');
                 }
-                if (!translationResponse.ok) {
-                    throw new Error(`HTTP ${translationResponse.status}: ${translationResponse.statusText}`);
-                }
-
-                const providerLangs = await providerResponse.json();
-                const translationLangs = await translationResponse.json();
+                const {
+                    providerLanguages: providerLangs,
+                    translationLanguages: translationLangs
+                } = await configPageState.loadLanguageCatalogs();
 
                 // Filter out special fake languages (like ___upload for File Translation) and dedupe variants
                 providerLanguages = dedupeLanguagesForUI(providerLangs.filter(lang => !lang.code.startsWith('___')));
@@ -7835,13 +8018,16 @@ Translate to {target_language}.`;
             // Reset ALL advanced settings fields to the new model's defaults
             const advModelEl = document.getElementById('advancedModel');
             const advThinkingEl = document.getElementById('advancedThinkingBudget');
+            const advThinkingLevelEl = document.getElementById('advancedThinkingLevel');
             const advTempEl = document.getElementById('advancedTemperature');
             const advTopPEl = document.getElementById('advancedTopP');
 
             if (advModelEl) advModelEl.value = ''; // Reset to "Use Default Model"
             if (advThinkingEl) advThinkingEl.value = modelDefaults.thinkingBudget;
+            if (advThinkingLevelEl) advThinkingLevelEl.value = modelDefaults.thinkingLevel || 'disabled';
             if (advTempEl) advTempEl.value = modelDefaults.temperature;
             if (advTopPEl) advTopPEl.value = fullDefaults.topP;
+            updateGeminiThinkingControl();
 
             // Update bypass cache state based on new defaults
             updateBypassCacheForAdvancedSettings();
@@ -7905,6 +8091,7 @@ Translate to {target_language}.`;
         // Advanced Settings - Auto-enable bypass cache when any setting is modified
         const advModelEl = document.getElementById('advancedModel');
         const advThinkingEl = document.getElementById('advancedThinkingBudget');
+        const advThinkingLevelEl = document.getElementById('advancedThinkingLevel');
         const advTempEl = document.getElementById('advancedTemperature');
         const advTopPEl = document.getElementById('advancedTopP');
         const workflowInputs = getTranslationWorkflowInputs();
@@ -7945,12 +8132,24 @@ Translate to {target_language}.`;
             tryFetchAdvancedModels();
         });
 
-        [advModelEl, advThinkingEl, advTempEl, advTopPEl, ...workflowInputs].forEach(el => {
+        [advModelEl, advThinkingEl, advThinkingLevelEl, advTempEl, advTopPEl, ...workflowInputs].forEach(el => {
             if (el) {
                 el.addEventListener('change', updateBypassCacheForAdvancedSettings);
                 el.addEventListener('input', updateBypassCacheForAdvancedSettings);
             }
         });
+
+        if (advModelEl) {
+            advModelEl.addEventListener('change', () => {
+                const selectedModel = getAdvancedGeminiModelValue();
+                const selectedDefaults = getModelSpecificDefaults(selectedModel);
+                if (advThinkingEl) advThinkingEl.value = selectedDefaults.thinkingBudget;
+                if (advThinkingLevelEl) advThinkingLevelEl.value = selectedDefaults.thinkingLevel || 'disabled';
+                if (advTempEl) advTempEl.value = selectedDefaults.temperature;
+                updateGeminiThinkingControl();
+                updateBypassCacheForAdvancedSettings();
+            });
+        }
 
         // Batch context toggle - show/hide context size field
         const enableBatchContextEl = document.getElementById('enableBatchContext');
@@ -8621,6 +8820,7 @@ Translate to {target_language}.`;
         }
         try {
             const requestBody = { apiKey };
+            requestBody.configStr = await ensureModelDiscoveryConfigToken();
             // For custom provider, include the baseUrl for model fetching
             if (providerKey === 'custom') {
                 const baseUrlInput = document.getElementById('provider-custom-baseUrl');
@@ -8658,6 +8858,99 @@ Translate to {target_language}.`;
                 showAlert(tConfig('config.alerts.loadModelsFailed', { provider: PROVIDERS[providerKey]?.label || providerKey, reason: err.message }, `Failed to load models for ${PROVIDERS[providerKey]?.label || providerKey}: ${err.message}`), 'error', 'config.alerts.loadModelsFailed', { provider: PROVIDERS[providerKey]?.label || providerKey, reason: err.message });
             }
         }
+    }
+
+    async function validateCustomProviderConfiguration() {
+        const baseUrlInput = document.getElementById('provider-custom-baseUrl');
+        const apiKeyInput = document.getElementById('provider-custom-key');
+        const modelInput = document.getElementById('provider-custom-model');
+        const btn = document.getElementById('validateCustomProvider');
+        if (!baseUrlInput || !apiKeyInput || !modelInput || !btn) return;
+
+        const baseUrl = baseUrlInput.value.trim();
+        const apiKey = apiKeyInput.value.trim();
+        const model = modelInput.value.trim();
+
+        baseUrlInput.classList.remove('invalid');
+        modelInput.classList.remove('invalid');
+
+        if (!baseUrl) {
+            baseUrlInput.classList.add('invalid');
+            baseUrlInput.focus();
+            showAlert(tConfig('config.alerts.missingCustomBaseUrl', {}, 'Enter a base URL for the custom provider'), 'warning');
+            return;
+        }
+        if (!model) {
+            modelInput.classList.add('invalid');
+            modelInput.focus();
+            showAlert(tConfig('config.validation.customProviderModelRequired', {}, 'Enter a model for the custom provider'), 'warning');
+            return;
+        }
+
+        const iconEl = btn.querySelector('.validate-icon');
+        const textEl = btn.querySelector('.validate-text');
+        const originalIcon = iconEl?.textContent || '✓';
+        const resetText = tConfig('config.providersUi.testConnection', {}, 'Test connection');
+
+        btn.classList.add('validating');
+        btn.classList.remove('success', 'error');
+        btn.disabled = true;
+        baseUrlInput.disabled = true;
+        apiKeyInput.disabled = true;
+        modelInput.disabled = true;
+        if (iconEl) iconEl.textContent = '⟳';
+        if (textEl) textEl.textContent = tConfig('config.validation.testing', {}, 'Testing...');
+
+        try {
+            const response = await fetch('/api/validate-custom-provider', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ baseUrl, apiKey, model })
+            });
+            const rawBody = await response.text();
+            let result = {};
+            try {
+                result = rawBody ? JSON.parse(rawBody) : {};
+            } catch (_) {
+                result = { valid: false, error: rawBody || response.statusText };
+            }
+
+            btn.classList.remove('validating');
+            btn.disabled = false;
+            baseUrlInput.disabled = false;
+            apiKeyInput.disabled = false;
+            modelInput.disabled = false;
+
+            if (response.ok && result.valid === true) {
+                btn.classList.add('success');
+                if (iconEl) iconEl.textContent = '✓';
+                if (textEl) textEl.textContent = tConfig('config.validation.valid', {}, 'Valid');
+                baseUrlInput.classList.add('valid');
+                modelInput.classList.add('valid');
+                showAlert(result.message || tConfig('config.validation.customProviderValid', {}, 'Custom provider configuration is valid'), 'success');
+            } else {
+                btn.classList.add('error');
+                if (iconEl) iconEl.textContent = '✗';
+                if (textEl) textEl.textContent = tConfig('config.validation.invalid', {}, 'Invalid');
+                showAlert(result.error || tConfig('config.validation.customProviderTestFailed', {}, 'Could not validate the custom provider configuration'), 'error');
+            }
+        } catch (_) {
+            btn.classList.remove('validating');
+            btn.classList.add('error');
+            btn.disabled = false;
+            baseUrlInput.disabled = false;
+            apiKeyInput.disabled = false;
+            modelInput.disabled = false;
+            if (iconEl) iconEl.textContent = '✗';
+            if (textEl) textEl.textContent = tConfig('config.validation.error', {}, 'Error');
+            showAlert(tConfig('config.validation.connectionError', {}, 'Connection error. Please try again.'), 'error');
+        }
+
+        setTimeout(() => {
+            btn.classList.remove('success', 'error');
+            if (iconEl) iconEl.textContent = originalIcon;
+            if (textEl) textEl.textContent = resetText;
+        }, 4000);
     }
 
     function validateGeminiApiKey(showNotification = false) {
@@ -9923,20 +10216,35 @@ Translate to {target_language}.`;
             statusDiv.className = 'model-status fetching';
         }
 
+        let timeoutId = null;
         try {
+            const configStr = await ensureModelDiscoveryConfigToken();
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+            timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
             const response = await fetch('/api/gemini-models', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ apiKey }),
+                body: JSON.stringify({
+                    apiKey,
+                    configStr
+                }),
                 signal: controller.signal
             });
             clearTimeout(timeoutId);
+            timeoutId = null;
 
             if (!response.ok) {
-                const payload = await response.json().catch(() => ({}));
-                throw new Error(payload.error || 'Failed to fetch models');
+                let publicMessage = 'Failed to fetch models';
+                try {
+                    const failure = await response.json();
+                    if (typeof failure?.error === 'string' && failure.error.trim()) {
+                        publicMessage = failure.error.trim();
+                    }
+                } catch (_) {
+                    // Keep the generic message for proxy/network responses that
+                    // are not JSON. Never render the raw response body.
+                }
+                throw new Error(publicMessage);
             }
 
             const models = await response.json();
@@ -9958,9 +10266,10 @@ Translate to {target_language}.`;
 
         } catch (error) {
             if (statusDiv) {
-                statusDiv.textContent = error.name === 'AbortError'
-                    ? 'Model lookup timed out. Please try again.'
-                    : (error.message || 'Failed to fetch models. Please try again.');
+                const message = error?.name === 'AbortError'
+                    ? 'Model discovery timed out. Please try again.'
+                    : (error?.message || 'Failed to fetch models. Check your API key.');
+                statusDiv.textContent = `✗ ${message}`;
                 statusDiv.className = 'model-status error';
 
                 setTimeout(() => {
@@ -9968,6 +10277,8 @@ Translate to {target_language}.`;
                     statusDiv.className = 'model-status';
                 }, 5000);
             }
+        } finally {
+            if (timeoutId) clearTimeout(timeoutId);
         }
     }
 
@@ -10328,23 +10639,12 @@ Translate to {target_language}.`;
                     newConfig.subtitleProviders.scs.apiKey = (oldScs.apiKey || '').trim();
                 }
 
-                // Wyzie: preserve enabled state and sources config if provider exists
+                // Wyzie: preserve enabled state and API key. Wyzie now owns the
+                // dynamic source inventory, so legacy per-source settings are dropped.
                 if (defaults.subtitleProviders.wyzie) {
                     const oldWyzie = oldConfig.subtitleProviders.wyzie || {};
                     newConfig.subtitleProviders.wyzie.enabled = oldWyzie.enabled === true;
                     newConfig.subtitleProviders.wyzie.apiKey = (oldWyzie.apiKey || '').trim();
-                    // Preserve sources config if it exists
-                    if (oldWyzie.sources && typeof oldWyzie.sources === 'object') {
-                        newConfig.subtitleProviders.wyzie.sources = normalizeWyzieSourceConfig(oldWyzie.sources);
-                    } else if (oldWyzie.enabled === true) {
-                        // BACKWARDS COMPAT: If user had Wyzie enabled but no sources saved,
-                        // default to ALL sources enabled (preserves their previous behavior)
-                        newConfig.subtitleProviders.wyzie.sources = {
-                            opensubtitles: true, subf2m: true, subdl: true,
-                            podnapisi: true, gestdown: true, animetosho: true,
-                            kitsunekko: true, jimaku: true, yify: true
-                        };
-                    }
                 }
 
                 // Subs.ro: preserve enabled state and apiKey if provider exists
@@ -10662,16 +10962,6 @@ Translate to {target_language}.`;
         }
         toggleProviderConfig('wyzieConfig', wyzieEnabled);
 
-        // Default all sources to DISABLED if not specified (user must opt-in)
-        const wyzieSourceConfig = normalizeWyzieSourceConfig(currentConfig.subtitleProviders?.wyzie?.sources) || {
-            opensubtitles: false, subf2m: false, subdl: false, podnapisi: false, gestdown: false, animetosho: false, kitsunekko: false, jimaku: false, yify: false
-        };
-        const sourceIds = ['opensubtitles', 'subf2m', 'subdl', 'podnapisi', 'gestdown', 'animetosho', 'kitsunekko', 'jimaku', 'yify'];
-        sourceIds.forEach(src => {
-            const el = document.getElementById('wyzieSource' + src.charAt(0).toUpperCase() + src.slice(1));
-            if (el) el.checked = wyzieSourceConfig[src] === true; // Default to false for new users
-        });
-
         // Subs.ro - Romanian subtitle database, requires API key
         const subsroEnabled = currentConfig.subtitleProviders?.subsro?.enabled === true;
         const subsroToggle = document.getElementById('enableSubsRo');
@@ -10802,6 +11092,7 @@ Translate to {target_language}.`;
 
         const advModelEl = document.getElementById('advancedModel');
         const advThinkingEl = document.getElementById('advancedThinkingBudget');
+        const advThinkingLevelEl = document.getElementById('advancedThinkingLevel');
         const advTempEl = document.getElementById('advancedTemperature');
         const advTopPEl = document.getElementById('advancedTopP');
 
@@ -10811,8 +11102,16 @@ Translate to {target_language}.`;
         }
 
         if (advThinkingEl) advThinkingEl.value = currentConfig.advancedSettings?.thinkingBudget ?? 0;
+        if (advThinkingLevelEl) {
+            const activeDefaults = getModelSpecificDefaults(currentConfig.advancedSettings?.geminiModel || currentConfig.geminiModel);
+            advThinkingLevelEl.value = sanitizeGeminiThinkingLevel(
+                currentConfig.advancedSettings?.thinkingLevel,
+                activeDefaults.thinkingLevel || 'disabled'
+            ) || 'disabled';
+        }
         if (advTempEl) advTempEl.value = currentConfig.advancedSettings?.temperature ?? 0.8;
         if (advTopPEl) advTopPEl.value = currentConfig.advancedSettings?.topP ?? 0.95;
+        updateGeminiThinkingControl();
 
         // Load batch context settings
         const enableBatchContextEl = document.getElementById('enableBatchContext');
@@ -11123,18 +11422,7 @@ Translate to {target_language}.`;
                 },
                 wyzie: {
                     enabled: document.getElementById('enableWyzie')?.checked || false,
-                    apiKey: document.getElementById('wyzieApiKey')?.value?.trim() || '',
-                    sources: {
-                        opensubtitles: document.getElementById('wyzieSourceOpensubtitles')?.checked === true,
-                        subf2m: document.getElementById('wyzieSourceSubf2m')?.checked === true,
-                        subdl: document.getElementById('wyzieSourceSubdl')?.checked === true,
-                        podnapisi: document.getElementById('wyzieSourcePodnapisi')?.checked === true,
-                        gestdown: document.getElementById('wyzieSourceGestdown')?.checked === true,
-                        animetosho: document.getElementById('wyzieSourceAnimetosho')?.checked === true,
-                        kitsunekko: document.getElementById('wyzieSourceKitsunekko')?.checked === true,
-                        jimaku: document.getElementById('wyzieSourceJimaku')?.checked === true,
-                        yify: document.getElementById('wyzieSourceYify')?.checked === true
-                    }
+                    apiKey: document.getElementById('wyzieApiKey')?.value?.trim() || ''
                 },
                 subsro: {
                     enabled: document.getElementById('enableSubsRo')?.checked || false,
@@ -11204,6 +11492,7 @@ Translate to {target_language}.`;
                 enabled: areAdvancedSettingsModified(), // Auto-detect if any setting differs from defaults
                 geminiModel: (function () { const el = document.getElementById('advancedModel'); return el ? el.value : ''; })(),
                 thinkingBudget: (function () { const el = document.getElementById('advancedThinkingBudget'); return el ? parseInt(el.value) : 0; })(),
+                thinkingLevel: (function () { const el = document.getElementById('advancedThinkingLevel'); return el ? sanitizeGeminiThinkingLevel(el.value) : ''; })(),
                 temperature: (function () { const el = document.getElementById('advancedTemperature'); return el ? parseFloat(el.value) : 0.8; })(),
                 topP: (function () { const el = document.getElementById('advancedTopP'); return el ? parseFloat(el.value) : 0.95; })(),
                 topK: 40, // Keep default topK
