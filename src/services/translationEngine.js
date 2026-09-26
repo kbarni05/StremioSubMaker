@@ -337,10 +337,19 @@ class TranslationEngine {
    * MULTI-INSTANCE FIX: Uses Redis via sharedCache for cross-pod state sharing.
    * Falls back to the bounded local LRU cache if Redis is unavailable.
    * @param {string} apiKey - The key that errored
+   * @param {Error} error - The provider error; only key-specific failures affect health
    * @returns {Promise<void>}
    */
-  async _recordKeyError(apiKey) {
+  async _recordKeyError(apiKey, error = null) {
     if (!this.retryRotationEnabled || !apiKey) return;
+
+    // Invalid payloads, missing models and content/format failures affect every
+    // key equally. Cooling all keys after these errors only prolongs an outage.
+    if (error) {
+      const status = Number(error.statusCode || error.response?.status || error.originalError?.response?.status || 0);
+      const keySpecific = error.type === 'authentication' || status === 401 || status === 403 || status === 429;
+      if (!keySpecific) return;
+    }
 
     // Update local cache immediately for fast in-process lookups
     const now = Date.now();
@@ -586,21 +595,26 @@ class TranslationEngine {
     if (!error) return false;
     const status = error.statusCode || error.status || error.response?.status || 0;
     const raw =
-      error.message ||
+      error.originalError?.providerMessage ||
+      error.providerMessage ||
+      error.originalError?.response?.data?.error?.message ||
       error.response?.data?.error?.message ||
       error.response?.data?.message ||
+      error.message ||
       '';
     const msg = String(raw).toLowerCase();
 
     const statusSuggestsRequestIssue = status === 400 || status === 404 || status === 405 || status === 415 || status === 422 || status === 501;
     const mentionsStructuredFeature =
       msg.includes('response_format') ||
+      msg.includes('responseschema') ||
+      msg.includes('responsemimetype') ||
       msg.includes('json_schema') ||
       msg.includes('json_object') ||
       msg.includes('structured output') ||
-      msg.includes('does not support') ||
-      msg.includes('unsupported') ||
-      msg.includes('unknown parameter');
+      msg.includes('structured_output') ||
+      (/(?:does not support|unsupported|unknown parameter)/.test(msg)
+        && /(?:json|schema|response.format|response_mime)/.test(msg));
 
     return statusSuggestsRequestIssue && mentionsStructuredFeature;
   }
@@ -1266,7 +1280,7 @@ class TranslationEngine {
     } catch (error) {
       // Track the error against the current key for health tracking
       if (this.retryRotationEnabled && this.gemini?.apiKey) {
-        this._recordKeyError(this.gemini.apiKey);
+        this._recordKeyError(this.gemini.apiKey, error);
       }
 
       // If JSON structured mode itself appears unsupported by provider/model, immediately
@@ -1311,7 +1325,7 @@ class TranslationEngine {
             // Stats: count each failed retry as an additional rate-limit error
             this.translationStats.rateLimitErrors++;
             if (this.retryRotationEnabled && this.gemini?.apiKey) {
-              this._recordKeyError(this.gemini.apiKey);
+              this._recordKeyError(this.gemini.apiKey, retryError);
             }
             log.warn(() => `[TranslationEngine] 429/503 key-rotation retry failed for batch ${batchIndex + 1} on attempt ${httpRetryAttempts}/${maxHttpRotationRetries}: ${retryError.message}`);
             if (!this._isRetryableHttpError(retryError)) {
@@ -1344,7 +1358,7 @@ class TranslationEngine {
           log.info(() => `[TranslationEngine] MAX_TOKENS retry succeeded for batch ${batchIndex + 1}`);
         } catch (retryError) {
           if (this.retryRotationEnabled && this.gemini?.apiKey) {
-            this._recordKeyError(this.gemini.apiKey);
+            this._recordKeyError(this.gemini.apiKey, retryError);
           }
           // Retry also failed, give up and throw the original error
           log.warn(() => `[TranslationEngine] MAX_TOKENS retry also failed for batch ${batchIndex + 1}: ${retryError.message}`);
@@ -1373,7 +1387,7 @@ class TranslationEngine {
           log.info(() => `[TranslationEngine] Retry with modified prompt succeeded for batch ${batchIndex + 1}`);
         } catch (retryError) {
           if (this.retryRotationEnabled && this.gemini?.apiKey) {
-            this._recordKeyError(this.gemini.apiKey);
+            this._recordKeyError(this.gemini.apiKey, retryError);
           }
           // Retry also failed, give up and throw the original error
           log.warn(() => `[TranslationEngine] Retry with modified prompt also failed: ${retryError.message}`);
@@ -1412,7 +1426,7 @@ class TranslationEngine {
             );
           } catch (nonStreamErr) {
             if (this.retryRotationEnabled && this.gemini?.apiKey) {
-              this._recordKeyError(this.gemini.apiKey);
+              this._recordKeyError(this.gemini.apiKey, nonStreamErr);
             }
             throw nonStreamErr;
           }
@@ -1515,7 +1529,7 @@ class TranslationEngine {
           }
         } catch (retryErr) {
           if (this.retryRotationEnabled && this.gemini?.apiKey) {
-            this._recordKeyError(this.gemini.apiKey);
+            this._recordKeyError(this.gemini.apiKey, retryErr);
           }
           log.warn(() => `[TranslationEngine] Two-pass targeted retry failed: ${retryErr.message}`);
         }
@@ -1540,7 +1554,7 @@ class TranslationEngine {
             }
           } catch (retryErr) {
             if (this.retryRotationEnabled && this.gemini?.apiKey) {
-              this._recordKeyError(this.gemini.apiKey);
+              this._recordKeyError(this.gemini.apiKey, retryErr);
             }
             log.warn(() => `[TranslationEngine] Full batch retry ${retryAttempt + 1} failed: ${retryErr.message}`);
           }

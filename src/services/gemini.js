@@ -30,6 +30,7 @@ const {
 const DEFAULT_GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta';
 const GEMINI_CLIENT_HEADER = `stremio-submaker/${PACKAGE_VERSION}`;
 const MAX_GEMINI_ERROR_MESSAGE_CHARS = 500;
+const MAX_GEMINI_ERROR_RESPONSE_BYTES = 16 * 1024;
 const DEFAULT_GEMINI_MODEL = 'gemini-3.1-flash-lite';
 const MODEL_LIMITS_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 const MODEL_LIMITS_CACHE_MAX = normalizePositiveInteger(process.env.GEMINI_MODEL_LIMITS_CACHE_MAX, 100);
@@ -88,6 +89,57 @@ function redactGeminiSecrets(value) {
   return String(value || '')
     .replace(/\bAIza[A-Za-z0-9_-]{16,}\b/g, '[REDACTED_API_KEY]')
     .replace(/\bAQ\.[A-Za-z0-9._-]{16,}\b/g, '[REDACTED_AUTH_KEY]');
+}
+
+async function readGeminiStreamError(error) {
+  const stream = error?.response?.data;
+  if (!stream || typeof stream[Symbol.asyncIterator] !== 'function') return;
+
+  const chunks = [];
+  let bytes = 0;
+  const timeout = setTimeout(() => stream.destroy(), 5000);
+  timeout.unref?.();
+  try {
+    for await (const chunk of stream) {
+      const buffer = Buffer.from(chunk);
+      if (bytes + buffer.length > MAX_GEMINI_ERROR_RESPONSE_BYTES) {
+        stream.destroy();
+        break;
+      }
+      chunks.push(buffer);
+      bytes += buffer.length;
+    }
+  } catch (_) {
+    // The response may close while being read; keep any bounded diagnostic body.
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  if (bytes > 0) {
+    const body = Buffer.concat(chunks).toString('utf8');
+    try {
+      const parsed = JSON.parse(body);
+      const providerError = parsed?.error;
+      if (providerError && typeof providerError === 'object') {
+        error.response.data = {
+          error: {
+            status: String(providerError.status || '').slice(0, 80),
+            message: redactGeminiSecrets(String(providerError.message || '')).slice(0, MAX_GEMINI_ERROR_MESSAGE_CHARS),
+            details: Array.isArray(providerError.details)
+              ? providerError.details.slice(0, 8).map(detail => ({
+                reason: redactGeminiSecrets(String(detail?.reason || '')).slice(0, 120),
+                retryDelay: String(detail?.retryDelay || '').slice(0, 32),
+              }))
+              : [],
+          },
+        };
+      } else {
+        error.response.data = { error: redactGeminiSecrets(String(providerError || body)).slice(0, MAX_GEMINI_ERROR_MESSAGE_CHARS) };
+      }
+    } catch (_) {
+      error.response.data = { error: redactGeminiSecrets(body).slice(0, MAX_GEMINI_ERROR_MESSAGE_CHARS) };
+    }
+  }
 }
 
 function isGemini3Model(model) {
@@ -357,6 +409,7 @@ class GeminiService {
     try {
       return await makeRequest(this.baseUrl);
     } catch (error) {
+      await readGeminiStreamError(error);
       if (
         this.fallbackBaseUrl &&
         this.baseUrl !== this.fallbackBaseUrl &&
@@ -364,7 +417,13 @@ class GeminiService {
       ) {
         const info = getGeminiErrorInfo(error);
         log.warn(() => `[Gemini] Primary API egress was rejected (${info.googleStatus || info.statusCode || 'unsupported location'}); retrying through the configured trusted fallback`);
-        const response = await makeRequest(this.fallbackBaseUrl);
+        let response;
+        try {
+          response = await makeRequest(this.fallbackBaseUrl);
+        } catch (fallbackError) {
+          await readGeminiStreamError(fallbackError);
+          throw fallbackError;
+        }
         this.baseUrl = this.fallbackBaseUrl;
         return response;
       }
@@ -722,13 +781,18 @@ class GeminiService {
         'post',
         `/models/${this.model}:countTokens`,
         {
-          systemInstruction: {
-            parts: [{ text: systemPrompt }]
-          },
-          contents: [{
-            role: 'user',
-            parts: [{ text: contentPrompt }]
-          }]
+          // countTokens accepts either contents or a full generateContentRequest.
+          // System instructions belong inside the latter, not at the top level.
+          generateContentRequest: {
+            model: `models/${this.model}`,
+            systemInstruction: {
+              parts: [{ text: systemPrompt }]
+            },
+            contents: [{
+              role: 'user',
+              parts: [{ text: contentPrompt }]
+            }]
+          }
         },
         {
           timeout: 10000,

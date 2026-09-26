@@ -6,6 +6,23 @@ All notable changes to this project will be documented in this file.
 
 No changes yet.
 
+## SubMaker v1.9.1
+
+**Bug Fixes:**
+
+- Fixed the `countTokens` request shape: system instructions now sit inside
+  `generateContentRequest`, as required by Google's API. The old request
+  produced repeated HTTP 400 warnings and forced approximate token counts.
+- Read bounded, redacted Gemini error bodies from streamed HTTP failures. The
+  logs now show the provider's actual 400 reason instead of only a generic
+  status code; a JSON-schema capability error can trigger the existing XML
+  translation fallback.
+- Invalid payload/model/content failures no longer mark working Gemini API keys
+  unhealthy or put them into a one-hour rotation cooldown. Key-specific
+  authentication and quota failures still do.
+- Expanded troubleshooting guidance for identifying the running fork image and
+  collecting the relevant, secret-free Gemini error line.
+
 ## SubMaker v1.9.0
 
 **Improvements:**

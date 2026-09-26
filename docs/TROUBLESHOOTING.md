@@ -27,6 +27,24 @@ same short-lived local snapshot as the Statistics page.
 
 ### ❌ Translation Fails / Errors
 
+If Stremio only shows **"Translation unavailable"**, that message does not
+identify the cause. First confirm the running app is this fork: open
+`https://YOUR-SUBMAKER-HOST/health` and check `version`, or inspect the
+`X-SubMaker-Version` response header. Your Compose `image:` must be
+`ghcr.io/kbarni05/stremiosubmaker:latest`; `xtremexq/submaker:latest` is the
+upstream image and will not receive this fork's fixes. With Watchtower enabled,
+the fork image updates automatically after a new `latest` image is published.
+
+For Gemini HTTP 400 failures, inspect the first `[Gemini] Translation error:`
+line after reproducing the failure in `docker logs submaker --tail 100`. Older
+builds hide the Google response behind `Request failed with status code 400`.
+The newer build reads and redacts the provider's error explanation, so it can
+distinguish an unsupported model setting from a bad request. A separate
+`countTokens` warning about `Unknown name "systemInstruction"` is fixed by
+nesting the generation request correctly; it was not by itself the translation
+failure. Do not post full API keys, passwords, addon URLs, or session tokens
+with your logs.
+
 | Problem | Solution |
 |---------|----------|
 | API key invalid | Validate key at [Google AI Studio](https://aistudio.google.com/apikey) |

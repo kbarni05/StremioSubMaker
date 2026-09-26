@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const axios = require('axios');
+const { Readable } = require('node:stream');
 
 process.env.LOG_TO_FILE = 'false';
 process.env.LOG_LEVEL = 'error';
@@ -84,6 +85,55 @@ test('Gemini 2.5 Flash explicitly disables thinking and keeps supported sampling
     assert.equal(capturedBody.generationConfig.temperature, 0.4);
     assert.equal(capturedBody.generationConfig.topK, 40);
     assert.equal(capturedBody.generationConfig.topP, 0.95);
+  } finally {
+    axios.post = originalPost;
+  }
+});
+
+test('Gemini token counting nests system instructions in generateContentRequest', async () => {
+  const originalPost = axios.post;
+  let capturedBody;
+  axios.post = async (_url, body) => {
+    capturedBody = body;
+    return { data: { totalTokens: 42 } };
+  };
+
+  try {
+    const gemini = new GeminiService('AIza-test-key-for-counting', 'gemini-3.1-flash-lite');
+    assert.equal(await gemini.countTokensForTranslation('Hello!', 'Hungarian'), 42);
+    assert.equal(Object.hasOwn(capturedBody, 'systemInstruction'), false);
+    assert.equal(Object.hasOwn(capturedBody, 'contents'), false);
+    assert.equal(capturedBody.generateContentRequest.model, 'models/gemini-3.1-flash-lite');
+    assert.match(capturedBody.generateContentRequest.systemInstruction.parts[0].text, /Translate the following subtitles/);
+    assert.match(capturedBody.generateContentRequest.contents[0].parts[0].text, /Hello!/);
+  } finally {
+    axios.post = originalPost;
+  }
+});
+
+test('Gemini streaming HTTP errors preserve the bounded provider explanation', async () => {
+  const originalPost = axios.post;
+  const leakedKey = 'AIza0123456789abcdefghijklmnop';
+  axios.post = async () => {
+    const error = new Error('Request failed with status code 400');
+    error.response = {
+      status: 400,
+      data: Readable.from([JSON.stringify({
+        error: { status: 'INVALID_ARGUMENT', message: `Unknown name "responseSchema": Cannot find field. ${leakedKey}` }
+      })]),
+    };
+    throw error;
+  };
+
+  try {
+    const gemini = new GeminiService('AIza-test-key-for-stream-errors', 'gemini-3.1-flash-lite', { maxRetries: 0 });
+    gemini.getModelLimits = async () => ({ outputTokenLimit: 65536 });
+    await assert.rejects(
+      gemini.streamTranslateSubtitle('Hello!', 'English', 'Hungarian'),
+      error => error.statusCode === 400
+        && error.originalError?.providerMessage === 'Unknown name "responseSchema": Cannot find field. [REDACTED_API_KEY]'
+        && !JSON.stringify(error.originalError?.response?.data).includes(leakedKey)
+    );
   } finally {
     axios.post = originalPost;
   }
