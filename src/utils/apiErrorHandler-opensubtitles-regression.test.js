@@ -59,6 +59,25 @@ test('preserves the upstream 406 message through the download error wrapper', ()
     assert.equal(isOpenSubtitlesQuotaError(wrapped), false);
 });
 
+test('Gemini API_KEY_INVALID HTTP 400 is preserved as an actionable authentication error', () => {
+    const error = new Error('API key not valid. Please pass a valid API key.');
+    error.statusCode = 400;
+    error.type = 'authentication';
+    error.response = {
+        status: 400,
+        data: { error: { status: 'INVALID_ARGUMENT', message: error.message } }
+    };
+
+    const parsed = parseApiError(error, 'Gemini');
+    assert.equal(parsed.type, 'authentication');
+    assert.match(parsed.userMessage, /Gemini rejected the API key/i);
+    assert.throws(
+        () => handleTranslationError(error, 'Gemini'),
+        wrapped => wrapped.translationErrorType === 'GEMINI_AUTH'
+            && /Gemini rejected the API key/i.test(wrapped.message)
+    );
+});
+
 test('still recognizes real OpenSubtitles quota responses, including wrapped errors', () => {
     const message = 'You have downloaded the allowed 200 subtitles in the last 24h. Your quota will be renewed later.';
     const error = upstream406(message);

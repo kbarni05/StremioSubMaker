@@ -6,6 +6,15 @@ All notable changes to this project will be documented in this file.
 
 No changes yet.
 
+## SubMaker v1.9.2
+
+**Bug Fixes:**
+
+- Classify Google's `API_KEY_INVALID` HTTP 400 response as a Gemini
+  authentication failure instead of a generic invalid request.
+- Show a clear, Hungarian-localized instruction to replace and validate the
+  Gemini key in both Stremio and translation history.
+
 ## SubMaker v1.9.1
 
 **Bug Fixes:**

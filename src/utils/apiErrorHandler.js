@@ -150,6 +150,8 @@ function parseApiError(error, serviceName = 'API', options = {}) {
   // Without this, manually-created errors with statusCode/type would be re-classified as 'unknown'
   if (typeof error.statusCode === 'number' && error.statusCode > 0) {
     parsed.statusCode = error.statusCode;
+  } else if (Number(error.response?.status) > 0) {
+    parsed.statusCode = Number(error.response.status);
   }
   if (typeof error.type === 'string' && error.type !== 'unknown') {
     parsed.type = error.type;
@@ -173,6 +175,17 @@ function parseApiError(error, serviceName = 'API', options = {}) {
       {},
       'Gemini rejected this server network location. Your API key may still be valid; ask the host to use eligible Gemini egress and paid access where required.'
     );
+    return parsed;
+  }
+  if (parsed.type === 'authentication') {
+    const isGemini = String(serviceLabel).toLowerCase() === 'gemini';
+    parsed.userMessage = isGemini
+      ? translate(
+        'apiErrors.geminiAuth',
+        {},
+        'Gemini rejected the API key. Replace it in the SubMaker configuration, validate it, and save the configuration again.'
+      )
+      : translate('apiErrors.authFailed', {}, 'Authentication failed. Please check your API credentials.');
     return parsed;
   }
 
@@ -450,6 +463,8 @@ function handleTranslationError(error, serviceName, options = {}) {
   // These are checked by performTranslation() and used to create user-friendly error messages
   if (!customError.translationErrorType && parsed.statusCode === 403) {
     customError.translationErrorType = '403';
+  } else if (!customError.translationErrorType && parsed.type === 'authentication' && String(serviceName || '').toLowerCase() === 'gemini') {
+    customError.translationErrorType = 'GEMINI_AUTH';
   } else if (!customError.translationErrorType && parsed.statusCode === 404) {
     customError.translationErrorType = 'MODEL_NOT_FOUND';
   } else if (!customError.translationErrorType && parsed.statusCode === 429) {

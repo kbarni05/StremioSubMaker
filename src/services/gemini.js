@@ -256,6 +256,9 @@ function decorateGeminiError(error) {
     error.providerMessage = info.message;
     error.message = info.message;
   }
+  if (info.type !== 'upstream_error') {
+    error.type = info.type;
+  }
   if (info.type === 'unsupported_location') {
     error.type = 'unsupported_location';
     error.isRetryable = false;

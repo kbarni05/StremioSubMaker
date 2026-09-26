@@ -139,6 +139,34 @@ test('Gemini streaming HTTP errors preserve the bounded provider explanation', a
   }
 });
 
+test('Gemini API_KEY_INVALID 400 reaches translation as a specific authentication error', async () => {
+  const originalPost = axios.post;
+  axios.post = async () => {
+    const error = new Error('Request failed with status code 400');
+    error.response = {
+      status: 400,
+      data: Readable.from([JSON.stringify({
+        error: { status: 'INVALID_ARGUMENT', message: 'API key not valid. Please pass a valid API key.' }
+      })]),
+    };
+    throw error;
+  };
+
+  try {
+    const gemini = new GeminiService('AIza-test-key-auth-error', 'gemini-3.7-flash', { maxRetries: 0 });
+    gemini.getModelLimits = async () => ({ outputTokenLimit: 65536 });
+    await assert.rejects(
+      gemini.streamTranslateSubtitle('Hello!', 'English', 'Hungarian'),
+      error => error.statusCode === 400
+        && error.type === 'authentication'
+        && error.translationErrorType === 'GEMINI_AUTH'
+        && /Gemini rejected the API key/i.test(error.message)
+    );
+  } finally {
+    axios.post = originalPost;
+  }
+});
+
 test('Gemini model discovery follows pagination and removes duplicates', async () => {
   const originalGet = axios.get;
   const calls = [];

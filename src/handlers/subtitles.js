@@ -1196,6 +1196,11 @@ function createTranslationErrorSubtitle(errorType, errorMessage, uiLanguage = 'e
     return ensureInformationalSubtitleSize(`1
 00:00:00,000 --> 04:00:00,000
 ${t('subtitle.translationGeminiLocation', {}, 'Translation Failed: Gemini Rejected Server Location')}`, null, uiLanguage);
+  } else if (errorType === 'GEMINI_AUTH') {
+    return ensureInformationalSubtitleSize(`1
+00:00:00,000 --> 04:00:00,000
+${t('subtitle.translationAuth', { provider: displayProvider }, 'Gemini API key is invalid')}
+${t('subtitle.translationAuthBody', { provider: displayProvider }, 'Replace the Gemini API key in the SubMaker configuration, validate it, and save the configuration again.')}`, null, uiLanguage);
   } else if (errorType === '403') {
     return ensureInformationalSubtitleSize(`1
 00:00:00,000 --> 04:00:00,000

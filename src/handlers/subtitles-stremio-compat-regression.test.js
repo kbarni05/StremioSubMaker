@@ -47,3 +47,10 @@ test('Gemini location failures use a concise title-only visible cue', () => {
     '1\n00:00:00,000 --> 04:00:00,000\nTranslation Failed: Gemini Rejected Server Location'
   );
 });
+
+test('Gemini invalid-key failures show a clear Hungarian recovery hint', () => {
+  const subtitle = createTranslationErrorSubtitle('GEMINI_AUTH', 'generic wrapper text', 'hu', 'Gemini');
+  assert.match(subtitle, /A Gemini API-kulcs érvénytelen/);
+  assert.match(subtitle, /Cseréld le a SubMaker beállításaiban/);
+  assert.doesNotMatch(subtitle, /Invalid request/i);
+});

@@ -158,6 +158,7 @@
       }
     },
     "apiErrors": {
+      "geminiAuth": "Gemini rejected the API key. Replace it in the SubMaker configuration, validate it, and save the configuration again.",
       "geminiRateLimit": "Gemini usage limit reached. Check your API key usage/quota or use another key.",
       "geminiUnsupportedLocation": "Gemini rejected this server network location. Your API key may still be valid; ask the host to use eligible Gemini egress and paid access where required.",
       "rateLimit": "{service} rate limit exceeded. Please wait a few minutes and try again.",
@@ -630,9 +631,9 @@
       "translationUnexpected": "An unexpected error occurred during translation.",
       "translationRetry": "An unexpected error occurred.\\nClick this subtitle again to retry translation.",
       "translationGeminiLocation": "Translation Failed: Gemini Rejected Server Location",
-      "translationAuth": "Translation Failed: Authentication Error (403)",
-      "translationAuthBody": "Your Gemini API key is invalid or rejected.\\nPlease check that your API key is correct.",
-      "translationAuthRetry": "Update your Gemini API key in the addon configuration,\\nthen reinstall the addon and try again.",
+      "translationAuth": "Translation Failed: Gemini API Key Invalid",
+      "translationAuthBody": "Google rejected the Gemini API key. Replace it in SubMaker's configuration and validate the new key.",
+      "translationAuthRetry": "Save the configuration, reinstall the addon in Stremio, then try again.",
       "translationOverload": "Translation Failed: Service Overloaded (503)",
       "translationOverloadBody": "The Gemini API is temporarily overloaded with requests.\\nThis is usually temporary and resolves within minutes.",
       "translationOverloadRetry": "(503) Service Unavailable - Wait a moment for Gemini to recover,\\nthen click this subtitle again to retry translation.",
