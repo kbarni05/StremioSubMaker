@@ -6,6 +6,7 @@ const {
   buildStremioSubtitleVariantLabel,
   createTranslationErrorSubtitle
 } = require('./subtitles');
+const { startMobileTranslationKeepalive } = require('../utils/mobileTranslationKeepalive');
 
 function makeSubtitle(id, languageCode, provider = 'test') {
   return {
@@ -53,4 +54,46 @@ test('Gemini invalid-key failures show a clear Hungarian recovery hint', () => {
   assert.match(subtitle, /A Gemini API-kulcs érvénytelen/);
   assert.match(subtitle, /Cseréld le a SubMaker beállításaiban/);
   assert.doesNotMatch(subtitle, /Invalid request/i);
+});
+
+test('mobile translation responses send harmless keepalives until the final SRT is ready', () => {
+  const headers = new Map();
+  const writes = [];
+  let scheduled = null;
+  let cleared = false;
+  let cacheMode = null;
+  const response = {
+    headersSent: false,
+    writableEnded: false,
+    destroyed: false,
+    setHeader(name, value) { headers.set(name, value); },
+    flushHeaders() { this.headersSent = true; },
+    write(chunk) { writes.push(chunk); },
+    once() { }
+  };
+  const timer = { unref() { } };
+
+  const stop = startMobileTranslationKeepalive(response, 'pob', {
+    setCacheHeaders(_res, mode) { cacheMode = mode; },
+    setIntervalFn(callback, intervalMs) {
+      scheduled = { callback, intervalMs };
+      return timer;
+    },
+    clearIntervalFn(value) {
+      assert.equal(value, timer);
+      cleared = true;
+    }
+  });
+
+  assert.equal(headers.get('Content-Type'), 'text/plain; charset=utf-8');
+  assert.equal(headers.get('Content-Disposition'), 'attachment; filename="translated_pob.srt"');
+  assert.equal(headers.get('X-Accel-Buffering'), 'no');
+  assert.equal(cacheMode, 'loading');
+  assert.equal(scheduled.intervalMs, 15_000);
+  assert.deepEqual(writes, ['\n']);
+
+  scheduled.callback();
+  assert.deepEqual(writes, ['\n', '\n']);
+  stop();
+  assert.equal(cleared, true);
 });

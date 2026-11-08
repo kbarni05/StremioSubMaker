@@ -19,6 +19,10 @@ const {
   normalizeGeminiModelId,
 } = require('./geminiSupport');
 const {
+  isGemini3Model,
+  resolveGeminiSamplingParametersEnabled
+} = require('../utils/geminiSampling');
+const {
   getProviderAuthFailureCacheKey,
   hasCachedProviderAuthFailure,
   cacheProviderAuthFailure,
@@ -49,7 +53,7 @@ const DEFAULT_MODELS = Object.freeze([
   { name: 'gemini-3.1-flash-lite', displayName: 'Gemini 3.1 Flash-Lite', description: 'Stable, fast and cost-efficient translation model' },
   { name: 'gemini-3.7-flash', displayName: 'Gemini 3.7 Flash', description: 'Current high-quality Flash model' },
   { name: 'gemini-3.6-flash', displayName: 'Gemini 3.6 Flash', description: 'Current recommended Flash replacement' },
-  { name: 'gemini-3.5-flash', displayName: 'Gemini 3.5 Flash', description: 'High-quality Flash model' },
+  { name: 'gemini-3.8-flash', displayName: 'Gemini 3.8 Flash', description: 'High-quality Flash model' },
   { name: 'gemini-3.5-flash-lite', displayName: 'Gemini 3.5 Flash-Lite', description: 'Fast lightweight Flash model' },
   { name: 'gemini-3.1-pro-preview', displayName: 'Gemini 3.1 Pro Preview', description: 'Quality-focused Pro model' },
 ]);
@@ -140,11 +144,6 @@ async function readGeminiStreamError(error) {
       error.response.data = { error: redactGeminiSecrets(body).slice(0, MAX_GEMINI_ERROR_MESSAGE_CHARS) };
     }
   }
-}
-
-function isGemini3Model(model) {
-  const modelId = normalizeGeminiModelId(model);
-  return /^gemini-3(?:[.-]|$)/i.test(modelId) || /^gemini-(?:flash|flash-lite|pro)-latest$/i.test(modelId);
 }
 
 function getFallbackOutputTokenLimit(model) {
@@ -354,6 +353,16 @@ class GeminiService {
       ? advancedSettings.thinkingLevel.trim().toLowerCase()
       : String(process.env.GEMINI_THINKING_LEVEL || '').trim().toLowerCase();
 
+    // Gemini 3.x must never receive legacy sampling controls. Older Gemini and
+    // Gemma models keep their historical behavior unless the user explicitly
+    // chooses model defaults by disabling these parameters.
+    const envSamplingParametersEnabled = process.env.GEMINI_SAMPLING_PARAMETERS_ENABLED;
+    this.samplingParametersEnabled = resolveGeminiSamplingParametersEnabled(
+      this.model,
+      advancedSettings.samplingParametersEnabled,
+      envSamplingParametersEnabled === undefined ? true : envSamplingParametersEnabled
+    );
+
     // Temperature (default: 0.8)
     this.temperature = clampNumber(
       advancedSettings.temperature ?? process.env.GEMINI_TEMPERATURE,
@@ -440,7 +449,7 @@ class GeminiService {
 
   getGemini3ThinkingLevel(thinkingBudget) {
     const allowedLevels = new Set(['disabled', 'minimal', 'low', 'medium', 'high']);
-    const requiresLowMinimum = /^gemini-3\.7-flash(?:[-.]|$)/.test(this.model)
+    const requiresLowMinimum = /^gemini-3\.(?:7|8)-flash(?:[-.]|$)/.test(this.model)
       || this.model.includes('3.1-pro')
       || this.model === 'gemini-pro-latest';
     if (allowedLevels.has(this.thinkingLevel)) {
@@ -487,9 +496,11 @@ class GeminiService {
       return generationConfig;
     }
 
-    generationConfig.temperature = this.temperature;
-    generationConfig.topK = this.topK;
-    generationConfig.topP = this.topP;
+    if (this.samplingParametersEnabled) {
+      generationConfig.temperature = this.temperature;
+      generationConfig.topK = this.topK;
+      generationConfig.topP = this.topP;
+    }
 
     if (thinkingBudget === -1) {
       generationConfig.thinkingConfig = { thinkingBudget: null };

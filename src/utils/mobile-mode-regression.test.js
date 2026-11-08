@@ -16,7 +16,7 @@ test('mobile duplicate requests join the primary response instead of returning a
   assert.notEqual(routeStart, -1);
   assert.match(route, /Mobile mode duplicate request[\s\S]*joining primary request/);
   assert.doesNotMatch(route, /return res\.send\(t\('server\.errors\.translationInProgress'/);
-  assert.match(route, /const subtitleContent = await deduplicate\(\s*dedupKey/);
+  assert.match(route, /(?:const )?subtitleContent = await deduplicate\(\s*dedupKey/);
   assert.match(route, /mobileDedupTtlMs[\s\S]*\{ ttl: mobileDedupTtlMs \}/);
 });
 
