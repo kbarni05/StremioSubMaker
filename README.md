@@ -11,7 +11,7 @@
 
 <p align="center">
   <a href="https://www.gnu.org/licenses/agpl-3.0"><img src="https://img.shields.io/badge/License-AGPL_v3-blue.svg?style=flat-square" alt="License: AGPL v3"/></a>
-  <img src="https://img.shields.io/badge/node-20.18%2B%20%7C%2022%20%7C%2024-brightgreen?style=flat-square" alt="Node 20.18+, 22, or 24"/>
+  <img src="https://img.shields.io/badge/node-patched%20LTS-brightgreen?style=flat-square" alt="Patched Node.js releases"/>
   <img src="https://img.shields.io/badge/Stremio-Addon-purple?style=flat-square" alt="Stremio Addon"/>
   <img src="https://img.shields.io/badge/languages-433-orange?style=flat-square" alt="433 Languages"/>
   <img src="https://img.shields.io/badge/AI-10%2B%20providers-ff69b4?style=flat-square" alt="10+ AI Providers"/>
@@ -48,7 +48,7 @@ Check their [FREE Stremio Addons Guide](https://stremio-addons-guide.elfhosted.c
 |----------|------------|
 | **Languages** | 197 supported languages (433 for translation) |
 | **Interface** | English, Spanish, Portuguese, Arabic, and Hungarian (`hu`/`hu-HU`) |
-| **Subtitle Sources** | OpenSubtitles, SubDL, SubSource, Wyzie, Stremio Community, Subs.ro |
+| **Subtitle Sources** | OpenSubtitles, SubDL, SubSource, The Subtitle Database, Wyzie, Stremio Community, Subs.ro, Jimaku (Japanese anime) |
 | **AI Translation** | 10+ providers: Gemini, OpenAI, Claude, DeepL, DeepSeek, Grok, Mistral, OpenRouter, Cloudflare, Custom/Local |
 | **Smart Caching** | Shared translation database — translate once, benefit everyone |
 | **Timestamp Workflows** | XML Tags, JSON, Numbered Timestamps, Send Timestamps to AI |
@@ -122,6 +122,8 @@ to it and `Escape` to clear the results.
 | OpenSubtitles | Optional (recommended) | V3 or authenticated mode |
 | SubDL | API key | [subdl.com/panel/api](https://subdl.com/panel/api) |
 | SubSource | API key | [subsource.net](https://subsource.net/) |
+| The Subtitle Database | None | [thesubtitledb.org](https://thesubtitledb.org/developer/api) |
+| Jimaku | API key | Japanese anime subtitles ([API docs](https://jimaku.cc/api/docs)) |
 | Wyzie Subs | API key | [store.wyzie.io/redeem](https://store.wyzie.io/redeem) |
 | Stremio Community Subtitles | None | Curated subtitles (beta) |
 | Subs.ro | API key | Romanian subtitles (beta) |
@@ -148,7 +150,7 @@ to it and `Escape` to clear the results.
 
 ### Prerequisites
 
-- **Node.js** 20.18.1+, 22, or 24 with npm 10.8.2+ — [nodejs.org](https://nodejs.org)
+- **Node.js** 22.23.4+, 24.22.1+, or 26.12.1+ with npm 11.17 or newer — [nodejs.org](https://nodejs.org)
 - **Gemini API Key** — [Get free](https://aistudio.google.com/app/api-keys)
 - At least one subtitle provider key (optional but recommended)
 
@@ -255,7 +257,8 @@ each entry's `id`, `url`, and deterministic list position.
 Enable "Advanced Mode" in Other Settings to unlock:
 - Batch Context (surrounding context for coherence)
 - Mismatch Retries (retry on wrong entry count)
-- Gemini Parameters (temperature, top-p, thinking budget)
+- Gemini sampling controls (use model defaults or customize temperature, Top-P, and Top-K)
+- Gemini thinking budget/level
 
 Gemini 2.5 and Gemini 3.x use different thinking controls. Keep the default value
 unless you need to tune it: the UI sends token budgets to 2.5 models and safely
@@ -335,6 +338,7 @@ The support page offers prefilled one-time and monthly support through GitHub Sp
 - [OpenSubtitles](https://www.opensubtitles.com/) — Primary subtitle database
 - [SubDL](https://subdl.com/) — Alternative subtitle source
 - [SubSource](https://subsource.net/) — Alternative subtitle source
+- [Jimaku](https://jimaku.cc/) — Japanese anime subtitle database
 - [Google Gemini](https://ai.google.dev/) — AI translation
 
 **Special Thanks**

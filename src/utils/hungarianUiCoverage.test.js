@@ -81,6 +81,10 @@ test('Hungarian covers every known main UI and subtitle-menu message without Eng
     'config.opensubs.title',
     'config.otherApiKeys.cloudflare.placeholder',
     'config.providerAdvanced.labels.topP',
+    'config.providers.tsdb.title',
+    'config.providers.tsdb.linkLabel',
+    'config.providers.jimaku.title',
+    'config.quickSetup.step2.tsdbName',
     'config.providers.subdl.linkLabel',
     'config.providers.subdl.title',
     'config.providers.subsource.linkLabel',
@@ -113,4 +117,24 @@ test('Hungarian covers every known main UI and subtitle-menu message without Eng
     .sort();
 
   assert.deepEqual(untranslated, []);
+});
+
+test('Hungarian includes every new subtitle provider and Gemini sampling message', () => {
+  const readMessages = (language) => {
+    const base = JSON.parse(fs.readFileSync(path.join(ROOT, 'locales', `${language}.json`), 'utf8')).messages;
+    const fragment = JSON.parse(fs.readFileSync(path.join(ROOT, 'locales', 'fragments', `${language}-ui.json`), 'utf8')).messages;
+    return flattenMessages(mergeMessages(base, expandDottedMessages(fragment)));
+  };
+  const english = readMessages('en');
+  const hungarian = readMessages('hu');
+  const prefixes = [
+    'config.providers.tsdb.',
+    'config.providers.jimaku.',
+    'config.advancedGemini.samplingParameters.',
+    'fileUpload.advanced.samplingParameters.',
+  ];
+  const keys = Object.keys(english).filter((key) => prefixes.some((prefix) => key.startsWith(prefix)));
+  assert.ok(keys.length > 0, 'upstream provider and sampling messages must be present');
+  const missing = keys.filter((key) => typeof hungarian[key] !== 'string' || !hungarian[key].trim());
+  assert.deepEqual(missing, [], 'new upstream controls must not silently fall back to English');
 });
